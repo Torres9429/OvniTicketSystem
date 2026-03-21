@@ -1,5 +1,6 @@
 from pathlib import Path
 from decouple import config
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -130,4 +131,74 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ]
+}
+LOGS_DIR = BASE_DIR / "logs"
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} | {levelname: <8} | {name}:{funcName}:{lineno} - {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+            "level": "DEBUG",
+        },
+        "file_debug": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOGS_DIR / "debug.log"),
+            "formatter": "verbose",
+            "level": "DEBUG",
+            "maxBytes": 10 * 1024 * 1024,  # 10 MB
+            "backupCount": 5,               # retención: últimos 5 archivos
+            "encoding": "utf-8",
+        },
+        "file_error": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOGS_DIR / "error.log"),
+            "formatter": "verbose",
+            "level": "ERROR",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+        },
+    },
+    "filters": {
+        "only_debug": {
+            "()": "django.utils.log.CallbackFilter",
+            "callback": lambda record: record.levelno <= 10,  # solo DEBUG
+        },
+        "only_error": {
+            "()": "django.utils.log.CallbackFilter",
+            "callback": lambda record: record.levelno >= 40,  # solo ERROR+
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file_debug"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.eventos": {
+            "handlers": ["console", "file_debug", "file_error"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "apps.lugares": {
+            "handlers": ["console", "file_debug", "file_error"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console", "file_debug", "file_error"],
+        "level": "DEBUG",
+    },
 }
