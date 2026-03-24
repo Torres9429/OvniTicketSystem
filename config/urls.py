@@ -9,4 +9,5 @@ urlpatterns = [
     path('api/', include('apps.grid_cells.urls')),
     path('api/', include('apps.ordenes.urls')),
     path('api/', include('apps.tickets.urls')),
+    path('api/', include('apps.asientos.urls')),
 ]
