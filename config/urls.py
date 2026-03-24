@@ -5,4 +5,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('apps.eventos.urls')),
     path('api/', include('apps.grid_cells.urls')),
+    path('api/', include('apps.ordenes.urls')),
+    path('api/', include('apps.tickets.urls')),
 ]
