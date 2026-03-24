@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/emili/Desktop/OvniTicketSystem/apps -name \"views.py\" -exec wc -l {})"
+    ]
+  }
+}
