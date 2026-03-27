@@ -97,9 +97,10 @@ class EventosViewSet(viewsets.ModelViewSet):
         logger.debug(f"PATCH /eventos/{pk}/ — payload: {request.data}")
         try:
             evento = Eventos.objects.get(pk=pk)
+            logger.info("Evento encontrado en bd")
         except Eventos.DoesNotExist:
             logger.warning(f"PATCH /eventos/{pk}/ — evento no encontrado")
-            return Response({"error": "Evento no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "El Evento no fue encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(evento, data=request.data, partial=True)
@@ -124,9 +125,10 @@ class EventosViewSet(viewsets.ModelViewSet):
         logger.debug(f"DELETE /eventos/{pk}/ — solicitud recibida")
         try:
             evento = Eventos.objects.get(pk=pk)
+            logger.info(f"Evento encontrado: {evento}")
         except Eventos.DoesNotExist:
             logger.warning(f"DELETE /eventos/{pk}/ — evento no encontrado")
-            return Response({"error": "Evento no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "No se encontró el evento"}, status=status.HTTP_404_NOT_FOUND)
 
 
 
@@ -153,7 +155,8 @@ class EventosViewSet(viewsets.ModelViewSet):
                 {"message": "Evento reactivado correctamente."},
                 status=status.HTTP_200_OK
             )
-        except: 
+        except Exception as e: 
+            logger.error(f"PATCH /eventos/{pk}/ — error al reactivar: {e}", exc_info=True)
             return Response(
                 {"error": "Error interno al reactivar el evento"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -165,7 +168,8 @@ class EventosViewSet(viewsets.ModelViewSet):
             eventos = get_all_eventos()
             serializer = EventosListSerializer(eventos, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        except:
+        except Exception as e:
+            logger.error(f"GET /eventos/ — error al listar: {e}", exc_info=True)
             return Response(
                 {"error": "Error al obtener eventos"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

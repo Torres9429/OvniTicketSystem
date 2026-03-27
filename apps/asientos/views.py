@@ -33,7 +33,7 @@ class AsientosViewSet(viewsets.ViewSet):
     def retrieve(self, request, pk=None):
         asiento = get_asiento_by_id(pk)
         if not asiento:
-            return Response({'error': 'Asiento no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'El asiento no fue encontrado'}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer_class()(asiento)
         return Response(serializer.data)
 
@@ -55,6 +55,6 @@ class AsientosViewSet(viewsets.ViewSet):
     def destroy(self, request, pk=None):
         asiento = get_asiento_by_id(pk)
         if not asiento:
-            return Response({'error': 'Asiento no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'No se pudo encontrar el asiento'}, status=status.HTTP_404_NOT_FOUND)
         delete_asiento(asiento)
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -1,4 +1,5 @@
 from rest_framework import viewsets
+from django.utils import timezone
 from .services import crear_zona, actualizar_zona, eliminar_zona
 from .selectors import get_all_zonas, buscar_zona_por_id, buscar_zona_por_nombre, buscar_zona_por_color, buscar_zona_por_fecha_creacion, buscar_zona_por_layout
 from .serializers import (ZonasSerializer, ZonasListSerializer, ZonasCreateSerializer, ZonasUpdateSerializer, ZonasDetailSerializer)
@@ -30,9 +31,17 @@ class ZonasViewSet(viewsets.ViewSet):
         return Response(serializer.data)
     
     def create(self, request):
-        serializer = self.get_serializer_class()(data=request.data)
+        serializer_class = self.get_serializer_class()
+        serializer = serializer_class(data=request.data)
         if serializer.is_valid():
-            zona = crear_zona(serializer.validated_data)
+            now = timezone.now()
+            zona = crear_zona(
+                nombre=serializer.validated_data.get('nombre'),
+                color=serializer.validated_data.get('color'),
+                fecha_creacion=now,
+                fecha_modificacion=now,
+                id_layout=serializer.validated_data.get('id_layout')
+            )
             return Response(ZonasSerializer(zona).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     

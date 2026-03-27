@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 class GridCellsViewSet(viewsets.ModelViewSet):
     queryset = GridCells.objects.all()
 
+    not_found_cell = "Celda no encontrada"
+
     def get_queryset(self):
         return GridCells.objects.all()
 
@@ -70,7 +72,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             grid_cell = GridCells.objects.get(pk=pk)
         except GridCells.DoesNotExist:
             logger.warning(f"PUT /grid-cells/{pk}/ — celda no encontrada")
-            return Response({"error": "Celda no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": not_found_cell}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(grid_cell, data=request.data)
@@ -97,7 +99,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             grid_cell = GridCells.objects.get(pk=pk)
         except GridCells.DoesNotExist:
             logger.warning(f"PATCH /grid-cells/{pk}/ — celda no encontrada")
-            return Response({"error": "Celda no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": not_found_cell}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(grid_cell, data=request.data, partial=True)
@@ -124,7 +126,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             grid_cell = GridCells.objects.get(pk=pk)
         except GridCells.DoesNotExist:
             logger.warning(f"DELETE /grid-cells/{pk}/ — celda no encontrada")
-            return Response({"error": "Celda no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": not_found_cell}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             eliminar_grid_cell(grid_cell)
