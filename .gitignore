@@ -17,3 +17,6 @@ config/logs/*.log
 config/logs/*.log.*
 config/logs/*.zip
 !config/logs/.gitkeep
+
+# Sonar
+sonar*
