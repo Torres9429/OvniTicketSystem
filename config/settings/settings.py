@@ -196,6 +196,11 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": False,
         },
+        "apps.layouts": {
+            "handlers": ["console", "file_debug", "file_error"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
     },
     "root": {
         "handlers": ["console", "file_debug", "file_error"],

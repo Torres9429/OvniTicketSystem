@@ -10,4 +10,6 @@ urlpatterns = [
     path('api/', include('apps.ordenes.urls')),
     path('api/', include('apps.tickets.urls')),
     path('api/', include('apps.asientos.urls')),
+    path('api/', include('apps.lugares.urls')),
+    path('api/', include('apps.layouts.urls')),
 ]
