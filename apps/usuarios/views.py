@@ -1,11 +1,16 @@
 import logging
+from django.contrib.auth.hashers import check_password
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Usuarios
 from .serializers import (
     UsuariosListSerializer, UsuariosDetailSerializer,
     UsuariosCreateSerializer, UsuariosUpdateSerializer,
+    LoginSerializer,
 )
 from .services import crear_usuario, actualizar_usuario, eliminar_usuario
 from .selectors import get_all_usuarios, get_usuarios_por_rol
@@ -157,3 +162,49 @@ class UsuariosViewSet(viewsets.ModelViewSet):
                 {"error": "Error al obtener usuarios del rol"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class LoginView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        logger.debug("POST /auth/login/ — intento de login")
+        serializer = LoginSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            logger.warning(f"POST /auth/login/ — validación fallida: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        correo = serializer.validated_data["correo"]
+        contrasena = serializer.validated_data["contrasena"]
+
+        try:
+            usuario = Usuarios.objects.select_related("id_rol").get(correo=correo)
+        except Usuarios.DoesNotExist:
+            logger.warning(f"POST /auth/login/ — correo no encontrado: {correo}")
+            return Response({"error": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not check_password(contrasena, usuario.contrasena):
+            logger.warning(f"POST /auth/login/ — contraseña incorrecta para: {correo}")
+            return Response({"error": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        refresh = RefreshToken()
+        refresh["user_id"] = usuario.id_usuario
+        refresh["correo"] = usuario.correo
+        refresh["rol"] = usuario.id_rol.nombre
+
+        logger.info(f"POST /auth/login/ — login exitoso para usuario id={usuario.id_usuario}")
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "usuario": {
+                    "id_usuario": usuario.id_usuario,
+                    "nombre": usuario.nombre,
+                    "correo": usuario.correo,
+                    "rol": usuario.id_rol.nombre,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

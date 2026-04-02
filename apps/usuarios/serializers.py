@@ -56,3 +56,8 @@ class UsuariosUpdateSerializer(serializers.ModelSerializer):
         if not value or not value.strip():
             raise serializers.ValidationError("El correo es obligatorio.")
         return value
+
+
+class LoginSerializer(serializers.Serializer):
+    correo = serializers.CharField()
+    contrasena = serializers.CharField(write_only=True)
