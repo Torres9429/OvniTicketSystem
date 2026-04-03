@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 class UsuariosViewSet(viewsets.ModelViewSet):
     queryset = Usuarios.objects.all()
 
+    def get_permissions(self):
+        if self.action in ("create",):
+            return [AllowAny()]
+        return super().get_permissions()
+
     def get_queryset(self):
         return get_all_usuarios()
 

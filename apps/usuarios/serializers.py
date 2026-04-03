@@ -37,7 +37,7 @@ class UsuariosCreateSerializer(serializers.ModelSerializer):
     def validate_correo(self, value):
         if not value or not value.strip():
             raise serializers.ValidationError("El correo es obligatorio.")
-        return value
+        return value.strip().lower()
 
 
 class UsuariosUpdateSerializer(serializers.ModelSerializer):
@@ -55,9 +55,20 @@ class UsuariosUpdateSerializer(serializers.ModelSerializer):
     def validate_correo(self, value):
         if not value or not value.strip():
             raise serializers.ValidationError("El correo es obligatorio.")
-        return value
+        return value.strip().lower()
 
 
 class LoginSerializer(serializers.Serializer):
     correo = serializers.CharField()
     contrasena = serializers.CharField(write_only=True)
+
+    def validate_correo(self, value):
+        value = value.strip().lower()
+        if not value:
+            raise serializers.ValidationError("El correo es obligatorio.")
+        return value
+
+    def validate_contrasena(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("La contraseña es obligatoria.")
+        return value

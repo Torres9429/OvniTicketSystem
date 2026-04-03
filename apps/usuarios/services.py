@@ -7,7 +7,7 @@ def crear_usuario(nombre: str, correo: str, contrasena: str, fecha_nacimiento, f
         nombre=nombre,
         apellidos=apellidos,
         correo=correo,
-        contrasena=make_password(contrasena),
+        contrasena=make_password(contrasena, hasher='bcrypt_sha256'),
         fecha_nacimiento=fecha_nacimiento,
         fecha_creacion=fecha_creacion,
         fecha_actualizacion=fecha_actualizacion,
