@@ -16,3 +16,12 @@ class Usuarios(models.Model):
     class Meta:
         db_table = 'usuarios'
         ordering = ['id_usuario']
+
+    @property
+    def is_authenticated(self):
+        # Compatibilidad con DRF/Django permissions
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
