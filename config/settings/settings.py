@@ -109,6 +109,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptPasswordHasher',
+]
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
@@ -222,3 +229,24 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
+
+AES_SECRET_KEY = config(
+    'AES_SECRET_KEY',
+    default=None,
+    cast=str
+)
+
+HMAC_SECRET_KEY = config(
+    'HMAC_SECRET_KEY',
+    default=None,
+    cast=str
+)
+
+# Validación en desarrollo
+if DEBUG and (AES_SECRET_KEY is None or HMAC_SECRET_KEY is None):
+    import warnings
+    warnings.warn(
+        "AES_SECRET_KEY y/o HMAC_SECRET_KEY no están configuradas. "
+        "Ejecutar: python generate_keys.py",
+        RuntimeWarning
+    )
