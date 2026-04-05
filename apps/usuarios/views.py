@@ -3,6 +3,7 @@ from django.contrib.auth.hashers import check_password
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
+from apps.common.permissions import IsAdmin
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -12,20 +13,66 @@ from .serializers import (
     UsuariosCreateSerializer, UsuariosUpdateSerializer,
     LoginSerializer,
 )
-from .services import crear_usuario, actualizar_usuario, eliminar_usuario
+from .models import Roles
+from .services import crear_usuario, actualizar_usuario, eliminar_usuario, aprobar_usuario, desactivar_usuario
 from .selectors import get_all_usuarios, get_usuarios_por_rol
 
 logger = logging.getLogger(__name__)
+
+
+class RegistroUsuarioView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = UsuariosCreateSerializer(data=request.data) 
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            rol = Roles.objects.get(nombre='usuario')
+            usuario = crear_usuario(**serializer.validated_data, id_rol=rol, estatus='activo')
+            return Response(UsuariosDetailSerializer(usuario).data, status=status.HTTP_201_CREATED)
+        except Roles.DoesNotExist:
+            return Response({"error": "Rol 'usuario' no encontrado"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.error(f"Error al registrar usuario: {e}", exc_info=True)
+            return Response({"error": "Error interno"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class RegistroOrganizadorView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = UsuariosCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            rol = Roles.objects.get(nombre='organizador')
+            usuario = crear_usuario(
+                **serializer.validated_data,
+                id_rol=rol,
+                estatus='pendiente'
+            )
+            return Response(
+                {"message": "Solicitud enviada, espera la aprobación del administrador."},
+                status=status.HTTP_201_CREATED
+            )
+        except Roles.DoesNotExist:
+            return Response({"error": "Rol 'cliente' no encontrado"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.error(f"Error al registrar cliente: {e}", exc_info=True)
+            return Response({"error": "Error interno"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UsuariosViewSet(viewsets.ModelViewSet):
     queryset = Usuarios.objects.all()
 
     def get_permissions(self):
-        if self.action in ("create",):
-            return [AllowAny()]
-        return super().get_permissions()
-
+        if self.action in ('aprobar', 'desactivar', 'destroy', 'list', 'retrieve', 'update', 'partial_update'):
+            return [IsAdmin()]
+        return [AllowAny()]
+    
     def get_queryset(self):
         return get_all_usuarios()
 
@@ -152,6 +199,30 @@ class UsuariosViewSet(viewsets.ModelViewSet):
                 {"error": "Error interno al eliminar el usuario"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        
+    @action(detail=True, methods=["patch"], url_path="aprobar")
+    def aprobar(self, request, pk=None):
+        try:
+            usuario = Usuarios.objects.get(pk=pk)
+        except Usuarios.DoesNotExist:
+            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+        if usuario.estatus != 'pendiente':
+            return Response({"error": "El usuario no está pendiente de aprobación"}, status=status.HTTP_400_BAD_REQUEST)
+
+        usuario = aprobar_usuario(usuario)
+        return Response({"message": "Usuario aprobado correctamente"}, status=status.HTTP_200_OK)
+    
+
+    @action(detail=True, methods=["patch"], url_path="desactivar")
+    def desactivar(self, request, pk=None):
+        try:
+            usuario = Usuarios.objects.get(pk=pk)
+        except Usuarios.DoesNotExist:
+            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+        usuario = desactivar_usuario(usuario)
+        return Response({"message": "Usuario desactivado correctamente"}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="por-rol/(?P<id_rol>[^/.]+)")
     def por_rol(self, request, id_rol=None):
@@ -183,7 +254,9 @@ class LoginView(APIView):
 
         correo = serializer.validated_data["correo"]
         contrasena = serializer.validated_data["contrasena"]
-
+        
+        logger.debug(f"DEBUG — correo: '{correo}' | contrasena: '{contrasena}'")
+        
         try:
             usuario = Usuarios.objects.select_related("id_rol").get(correo=correo)
         except Usuarios.DoesNotExist:
@@ -193,6 +266,11 @@ class LoginView(APIView):
         if not check_password(contrasena, usuario.contrasena):
             logger.warning(f"POST /auth/login/ — contraseña incorrecta para: {correo}")
             return Response({"error": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if usuario.estatus == 'pendiente':
+            return Response({"error": "Tu cuenta está pendiente de aprobación."}, status=status.HTTP_403_FORBIDDEN)
+        if usuario.estatus == 'inactivo':
+            return Response({"error": "Tu cuenta está desactivada."}, status=status.HTTP_403_FORBIDDEN)
 
         refresh = RefreshToken()
         refresh["user_id"] = usuario.id_usuario
