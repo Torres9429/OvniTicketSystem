@@ -5,7 +5,7 @@ from apps.layouts.models import Layouts
 class Eventos(models.Model):
     id_evento = models.BigAutoField(primary_key=True)
     nombre = models.CharField(max_length=100)
-    descripcion = models.CharField(max_length=150, blank=False)
+    descripcion = models.CharField(max_length=150, null=True, blank=True)
     fecha_inicio = models.DateTimeField()
     fecha_fin = models.DateTimeField()
     tiempo_espera = models.IntegerField()

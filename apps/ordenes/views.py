@@ -11,6 +11,7 @@ from .services import crear_orden, actualizar_orden, eliminar_orden
 from .selectors import get_all_ordenes, get_ordenes_por_evento, get_ordenes_por_usuario
 
 logger = logging.getLogger(__name__)
+ERROR_ORDEN_NO_ENCONTRADA = "Orden no encontrada"
 
 
 class OrdenesViewSet(viewsets.ModelViewSet):
@@ -73,7 +74,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             orden = Ordenes.objects.get(pk=pk)
         except Ordenes.DoesNotExist:
             logger.warning(f"PUT /ordenes/{pk}/ — orden no encontrada")
-            return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_ORDEN_NO_ENCONTRADA}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(orden, data=request.data)
@@ -100,7 +101,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             orden = Ordenes.objects.get(pk=pk)
         except Ordenes.DoesNotExist:
             logger.warning(f"PATCH /ordenes/{pk}/ — orden no encontrada")
-            return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_ORDEN_NO_ENCONTRADA}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(orden, data=request.data, partial=True)
@@ -127,7 +128,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             orden = Ordenes.objects.get(pk=pk)
         except Ordenes.DoesNotExist:
             logger.warning(f"DELETE /ordenes/{pk}/ — orden no encontrada")
-            return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_ORDEN_NO_ENCONTRADA}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             eliminar_orden(orden, id_usuario=request.user, request=request)

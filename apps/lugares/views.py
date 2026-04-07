@@ -9,6 +9,7 @@ from .models import Lugares
 from .selectors import get_lugares_disponibles, get_all_lugares
 
 logger = logging.getLogger(__name__)
+ERROR_LUGAR_NO_ENCONTRADO = "Lugar no encontrado"
 
 class LugaresViewSet(viewsets.ModelViewSet):
     queryset = Lugares.objects.all()
@@ -69,10 +70,10 @@ class LugaresViewSet(viewsets.ModelViewSet):
     def update(self, request, pk=None, *args, **kwargs):
         logger.debug(f"PUT /lugares/{pk}/ — payload: {request.data}")
         try:
-            lugar = Lugares.objects.get(pk=pk)
+            Lugares.objects.get(pk=pk)
         except Lugares.DoesNotExist:
             logger.warning(f"PUT /lugares/{pk}/ — lugar no encontrado")
-            return Response({"error": "Lugar no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_LUGAR_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(lugar, data=request.data)
@@ -99,7 +100,7 @@ class LugaresViewSet(viewsets.ModelViewSet):
             lugar = Lugares.objects.get(pk=pk)
         except Lugares.DoesNotExist:
             logger.warning(f"PATCH /lugares/{pk}/ — lugar no encontrado")
-            return Response({"error": "Lugar no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_LUGAR_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(lugar, data=request.data, partial=True)
@@ -123,10 +124,10 @@ class LugaresViewSet(viewsets.ModelViewSet):
     def destroy(self, request, pk=None, *args, **kwargs):
         logger.debug(f"DELETE /lugares/{pk}/ — solicitud recibida")
         try:
-            lugar = Lugares.objects.get(pk=pk)
+            Lugares.objects.get(pk=pk)
         except Lugares.DoesNotExist:
             logger.warning(f"DELETE /lugares/{pk}/ — lugar no encontrado")
-            return Response({"error": "Lugar no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_LUGAR_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=["patch"])
     def deactivate(self, request, pk=None):
@@ -151,7 +152,8 @@ class LugaresViewSet(viewsets.ModelViewSet):
                 {"message": "Lugar reactivado correctamente."},
                 status=status.HTTP_200_OK
             )
-        except:
+        except Exception as e:
+            logger.error(f"PATCH /lugares/{pk}/reactivate — error: {e}", exc_info=True)
             return Response(
                 {"error": "Error interno al reactivar el lugar"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -163,7 +165,8 @@ class LugaresViewSet(viewsets.ModelViewSet):
             lugares = get_all_lugares()
             serializer = LugaresListSerializer(lugares, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        except:
+        except Exception as e:
+            logger.error(f"GET /lugares/all — error: {e}", exc_info=True)
             return Response(
                 {"error": "Error al obtener lugares"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

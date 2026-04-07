@@ -1,6 +1,5 @@
 import logging
 from rest_framework import viewsets
-from django.utils import timezone
 from .models import Zonas
 from .services import crear_zona, actualizar_zona, eliminar_zona
 from .selectors import get_all_zonas, buscar_zona_por_id, buscar_zona_por_nombre, buscar_zona_por_color, buscar_zona_por_fecha_creacion, buscar_zona_por_layout
@@ -42,12 +41,9 @@ class ZonasViewSet(viewsets.ViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            now = timezone.now()
             zona = crear_zona(
                 nombre=serializer.validated_data.get('nombre'),
                 color=serializer.validated_data.get('color'),
-                fecha_creacion=now,
-                fecha_modificacion=now,
                 id_layout=serializer.validated_data.get('id_layout'),
                 id_usuario=request.user,
                 request=request

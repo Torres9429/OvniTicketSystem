@@ -11,6 +11,7 @@ from .services import crear_ticket, actualizar_ticket, eliminar_ticket
 from .selectors import get_all_tickets, get_tickets_por_orden, get_tickets_por_evento
 
 logger = logging.getLogger(__name__)
+ERROR_TICKET_NO_ENCONTRADO = "Ticket no encontrado"
 
 
 class TicketsViewSet(viewsets.ModelViewSet):
@@ -73,7 +74,7 @@ class TicketsViewSet(viewsets.ModelViewSet):
             ticket = Tickets.objects.get(pk=pk)
         except Tickets.DoesNotExist:
             logger.warning(f"PUT /tickets/{pk}/ — ticket no encontrado")
-            return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_TICKET_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(ticket, data=request.data)
@@ -100,7 +101,7 @@ class TicketsViewSet(viewsets.ModelViewSet):
             ticket = Tickets.objects.get(pk=pk)
         except Tickets.DoesNotExist:
             logger.warning(f"PATCH /tickets/{pk}/ — ticket no encontrado")
-            return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_TICKET_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(ticket, data=request.data, partial=True)
@@ -127,7 +128,7 @@ class TicketsViewSet(viewsets.ModelViewSet):
             ticket = Tickets.objects.get(pk=pk)
         except Tickets.DoesNotExist:
             logger.warning(f"DELETE /tickets/{pk}/ — ticket no encontrado")
-            return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_TICKET_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             eliminar_ticket(ticket, id_usuario=request.user, request=request)

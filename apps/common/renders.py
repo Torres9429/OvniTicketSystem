@@ -5,9 +5,7 @@ import hashlib
 import logging
 from secrets import token_bytes
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
 from rest_framework.renderers import BaseRenderer
-from django.conf import settings
 from .crypto import _get_keys, CryptoException
 
 
@@ -37,19 +35,19 @@ class AESRenderer(BaseRenderer):
             # Serializar respuesta
             plaintext = json.dumps(data, ensure_ascii=False).encode("utf-8")
             
-            # Generar IV aleatorio
-            iv = token_bytes(16)
+            # Generar nonce aleatorio
+            nonce = token_bytes(16)
             
-            # Cifrar
-            cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-            ciphertext = cipher.encrypt(pad(plaintext, 16))
+            # Cifrar con GCM (sin padding)
+            cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+            ciphertext, tag = cipher.encrypt_and_digest(plaintext)
             
             # Calcular HMAC
-            hmac_obj = hmac.new(hmac_key, iv + ciphertext, hashlib.sha256)
+            hmac_obj = hmac.new(hmac_key, nonce + ciphertext + tag, hashlib.sha256)
             auth_tag = hmac_obj.digest()
             
-            # Empaquetar: iv + ciphertext + auth_tag
-            payload = iv + ciphertext + auth_tag
+            # Empaquetar: nonce + ciphertext + tag + auth_tag
+            payload = nonce + ciphertext + tag + auth_tag
             ciphertext_b64 = base64.urlsafe_b64encode(payload).decode('utf-8')
             
             # Retornar respuesta cifrada

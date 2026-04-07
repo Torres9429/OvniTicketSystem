@@ -1,8 +1,12 @@
 import re
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.exceptions import InvalidToken
 from .models import Usuarios
 from apps.roles.models import Roles
 from datetime import date
+
+ERROR_CORREO_OBLIGATORIO = "El correo es obligatorio."
 
 class UsuariosListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -36,7 +40,7 @@ class UsuariosCreateSerializer(serializers.ModelSerializer):
 
     def validate_correo(self, value):
         if not value or not value.strip():
-            raise serializers.ValidationError("El correo es obligatorio.")
+            raise serializers.ValidationError(ERROR_CORREO_OBLIGATORIO)
         if "@" not in value:
             raise serializers.ValidationError("El correo no es válido.")
         return value
@@ -48,7 +52,7 @@ class UsuariosCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("La contraseña debe tener al menos una letra mayúscula.")
         if not re.search(r'[a-z]', value):
             raise serializers.ValidationError("La contraseña debe tener al menos una letra minúscula.")
-        if not re.search(r'[0-9]', value):
+        if not re.search(r'\d', value):
             raise serializers.ValidationError("La contraseña debe tener al menos un número.")
         if not re.search(r'[!@#$%&.]', value):
             raise serializers.ValidationError("La contraseña debe tener al menos un carácter especial.")
@@ -76,7 +80,7 @@ class UsuariosUpdateSerializer(serializers.ModelSerializer):
 
     def validate_correo(self, value):
         if not value or not value.strip():
-            raise serializers.ValidationError("El correo es obligatorio.")
+            raise serializers.ValidationError(ERROR_CORREO_OBLIGATORIO)
         return value.strip().lower()
 
 
@@ -87,10 +91,39 @@ class LoginSerializer(serializers.Serializer):
     def validate_correo(self, value):
         value = value.strip().lower()
         if not value:
-            raise serializers.ValidationError("El correo es obligatorio.")
+            raise serializers.ValidationError(ERROR_CORREO_OBLIGATORIO)
         return value
 
     def validate_contrasena(self, value):
         if not value or not value.strip():
             raise serializers.ValidationError("La contraseña es obligatoria.")
         return value
+
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    """
+    Serializer personalizado para refrescar tokens.
+    Busca el usuario en el modelo Usuarios en lugar de usar Django User.
+    """
+    def validate(self, attrs):
+        # Validar el refresh token
+        refresh = self.token_class(attrs['refresh'])
+        
+        try:
+            # Extraer user_id del token
+            user_id = refresh.get('user_id')
+            if not user_id:
+                raise InvalidToken('Token does not contain user_id')
+            
+            # Buscar el usuario en Usuarios (no en django.contrib.auth.User)
+            Usuarios.objects.get(id_usuario=user_id)
+            
+        except Usuarios.DoesNotExist:
+            raise InvalidToken('Usuario no encontrado o fue eliminado')
+        except KeyError:
+            raise InvalidToken('Token does not contain user_id')
+        
+        # Generar nuevo access token
+        data = {'access': str(refresh.access_token)}
+        
+        return data
