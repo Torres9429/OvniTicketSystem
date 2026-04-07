@@ -32,7 +32,7 @@ class RegistroUsuarioView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
             rol = Roles.objects.get(nombre='usuario')
-            usuario = crear_usuario(**serializer.validated_data, id_rol=rol, estatus='activo')
+            usuario = crear_usuario(**serializer.validated_data, id_rol=rol, estatus='activo', request=request)
             return Response(UsuariosDetailSerializer(usuario).data, status=status.HTTP_201_CREATED)
         except Roles.DoesNotExist:
             return Response({"error": "Rol 'usuario' no encontrado"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -54,7 +54,8 @@ class RegistroOrganizadorView(APIView):
             crear_usuario(
                 **serializer.validated_data,
                 id_rol=rol,
-                estatus='pendiente'
+                estatus='pendiente',
+                request=request
             )
             return Response(
                 {"message": "Solicitud enviada, espera la aprobación del administrador."},
@@ -115,7 +116,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            usuario = crear_usuario(**serializer.validated_data)
+            usuario = crear_usuario(**serializer.validated_data, request=request)
             output = UsuariosDetailSerializer(usuario)
             logger.info(f"POST /usuarios/ — usuario creado con id={usuario.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -142,7 +143,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            usuario = actualizar_usuario(usuario, **serializer.validated_data)
+            usuario = actualizar_usuario(usuario, **serializer.validated_data, request=request)
             output = UsuariosDetailSerializer(usuario)
             logger.info(f"PUT /usuarios/{pk}/ — usuario actualizado correctamente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -169,7 +170,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            usuario = actualizar_usuario(usuario, **serializer.validated_data)
+            usuario = actualizar_usuario(usuario, **serializer.validated_data, request=request)
             output = UsuariosDetailSerializer(usuario)
             logger.info(f"PATCH /usuarios/{pk}/ — usuario actualizado parcialmente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -189,7 +190,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            eliminar_usuario(usuario)
+            eliminar_usuario(usuario, request=request)
             logger.info(f"DELETE /usuarios/{pk}/ — usuario eliminado")
             return Response(
                 {"message": "Usuario eliminado correctamente"},
@@ -212,7 +213,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
         if usuario.estatus != 'pendiente':
             return Response({"error": "El usuario no está pendiente de aprobación"}, status=status.HTTP_400_BAD_REQUEST)
 
-        usuario = aprobar_usuario(usuario)
+        usuario = aprobar_usuario(usuario, request=request)
         return Response({"message": "Usuario aprobado correctamente"}, status=status.HTTP_200_OK)
     
 
@@ -223,7 +224,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
         except Usuarios.DoesNotExist:
             return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
-        usuario = desactivar_usuario(usuario)
+        usuario = desactivar_usuario(usuario, request=request)
         return Response({"message": "Usuario desactivado correctamente"}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="por-rol/(?P<id_rol>[^/.]+)")

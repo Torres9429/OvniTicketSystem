@@ -55,8 +55,7 @@ class LayoutsCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Layouts
         fields = (
-            'grid_rows', 'grid_cols', 'version', 'estatus', 'fecha_creacion',
-            'fecha_actualizacion', 'id_lugar', 'id_dueno', 'layout_data'
+            'grid_rows', 'grid_cols', 'version', 'estatus', 'id_lugar', 'id_dueno', 'layout_data'
         )
 
     def validate_estatus(self, value):

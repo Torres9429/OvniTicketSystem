@@ -33,8 +33,7 @@ class LugaresCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lugares
         fields = (
-            'nombre', 'ciudad', 'pais', 'direccion', 'estatus',
-            'fecha_creacion', 'fecha_actualizacion', 'id_dueno'
+            'nombre', 'ciudad', 'pais', 'direccion', 'estatus', 'id_dueno'
         )
 
     def validate_nombre(self, value):

@@ -56,7 +56,7 @@ class LugaresViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            lugar = crear_lugar(**serializer.validated_data)
+            lugar = crear_lugar(**serializer.validated_data, request=request)
             output = LugaresDetailSerializer(lugar)
             logger.info(f"POST /lugares/ — lugar creado con id={lugar.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -83,7 +83,7 @@ class LugaresViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            lugar = actualizar_lugar(lugar, **serializer.validated_data)
+            lugar = actualizar_lugar(lugar, **serializer.validated_data, request=request)
             output = LugaresDetailSerializer(lugar)
             logger.info(f"PUT /lugares/{pk}/ — lugar actualizado correctamente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -110,7 +110,7 @@ class LugaresViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            lugar = actualizar_lugar(lugar, **serializer.validated_data)
+            lugar = actualizar_lugar(lugar, **serializer.validated_data, request=request)
             output = LugaresDetailSerializer(lugar)
             logger.info(f"PATCH /lugares/{pk}/ — lugar actualizado parcialmente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -133,7 +133,7 @@ class LugaresViewSet(viewsets.ModelViewSet):
     def deactivate(self, request, pk=None):
         try:
             lugar = self.get_object()
-            desactivar_lugar(lugar=lugar)
+            desactivar_lugar(lugar=lugar, id_usuario=request.user, request=request)
             logger.info(f"DELETE /lugares/{pk}/ — lugar desactivado")
             return Response({"message": "Lugar desactivado correctamente"}, status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
@@ -147,7 +147,7 @@ class LugaresViewSet(viewsets.ModelViewSet):
     def reactivate(self, request, pk=None):
         lugar = self.get_object()
         try:
-            activar_lugar(lugar=lugar)
+            activar_lugar(lugar=lugar, id_usuario=request.user, request=request)
             return Response(
                 {"message": "Lugar reactivado correctamente."},
                 status=status.HTTP_200_OK

@@ -39,8 +39,7 @@ class EventosCreateSerializer(serializers.ModelSerializer):
         model  = Eventos
         fields = (
             'nombre', 'descripcion', 'fecha_inicio', 'fecha_fin',
-            'tiempo_espera', 'foto', 'estatus', 'id_lugar', 'id_version', 
-            'fecha_creacion', 'fecha_actualizacion'
+            'tiempo_espera', 'foto', 'estatus', 'id_lugar', 'id_version'
         )
 
     def validate_nombre(self, value):

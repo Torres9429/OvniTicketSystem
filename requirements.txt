@@ -10,3 +10,4 @@ PyJWT==2.12.1
 python-decouple==3.8
 sqlparse==0.5.5
 tzdata==2025.3
+django-ipware==7.0.1

@@ -6,7 +6,7 @@ def get_all_zonas():
     return zonas
 
 def buscar_zona_por_id(id_zona):
-    zonas = Zonas.objects.filter(id_zona=id_zona)
+    zonas = Zonas.objects.get(id_zona=id_zona)
     return zonas
 
 def buscar_zona_por_nombre(nombre: str):

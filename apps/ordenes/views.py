@@ -57,7 +57,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            orden = crear_orden(**serializer.validated_data)
+            orden = crear_orden(**serializer.validated_data, id_usuario=request.user, request=request)
             output = OrdenesDetailSerializer(orden)
             logger.info(f"POST /ordenes/ — orden creada con id={orden.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -84,7 +84,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            orden = actualizar_orden(orden, **serializer.validated_data)
+            orden = actualizar_orden(orden, **serializer.validated_data, id_usuario=request.user, request=request)
             output = OrdenesDetailSerializer(orden)
             logger.info(f"PUT /ordenes/{pk}/ — orden actualizada correctamente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -111,7 +111,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            orden = actualizar_orden(orden, **serializer.validated_data)
+            orden = actualizar_orden(orden, **serializer.validated_data, id_usuario=request.user, request=request)
             output = OrdenesDetailSerializer(orden)
             logger.info(f"PATCH /ordenes/{pk}/ — orden actualizada parcialmente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -131,7 +131,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             return Response({"error": ERROR_ORDEN_NO_ENCONTRADA}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            eliminar_orden(orden)
+            eliminar_orden(orden, id_usuario=request.user, request=request)
             logger.info(f"DELETE /ordenes/{pk}/ — orden eliminada")
             return Response(
                 {"message": "Orden eliminada correctamente"},

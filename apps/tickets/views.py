@@ -57,7 +57,7 @@ class TicketsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            ticket = crear_ticket(**serializer.validated_data)
+            ticket = crear_ticket(**serializer.validated_data, id_usuario=request.user, request=request)
             output = TicketsDetailSerializer(ticket)
             logger.info(f"POST /tickets/ — ticket creado con id={ticket.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -84,7 +84,7 @@ class TicketsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            ticket = actualizar_ticket(ticket, **serializer.validated_data)
+            ticket = actualizar_ticket(ticket, **serializer.validated_data, id_usuario=request.user, request=request)
             output = TicketsDetailSerializer(ticket)
             logger.info(f"PUT /tickets/{pk}/ — ticket actualizado correctamente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -131,7 +131,7 @@ class TicketsViewSet(viewsets.ModelViewSet):
             return Response({"error": ERROR_TICKET_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            eliminar_ticket(ticket)
+            eliminar_ticket(ticket, id_usuario=request.user, request=request)
             logger.info(f"DELETE /tickets/{pk}/ — ticket eliminado")
             return Response(
                 {"message": "Ticket eliminado correctamente"},
