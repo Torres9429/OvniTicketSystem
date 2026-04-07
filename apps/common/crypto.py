@@ -4,7 +4,6 @@ import hmac
 import hashlib
 from secrets import token_bytes
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
 from django.conf import settings
 
 
@@ -56,13 +55,13 @@ def _get_keys():
 
 def encrypt_payload(data: dict) -> str:
     """
-    Cifra un diccionario usando AES-256-CBC con IV aleatorio y HMAC.
+    Cifra un diccionario usando AES-256-GCM con nonce aleatorio y HMAC.
     
     Args:
         data: Diccionario a cifrar
         
     Returns:
-        String en formato: base64(iv + ciphertext + hmac)
+        String en formato: base64(nonce + ciphertext + tag + hmac)
         
     Raises:
         CryptoException: Si hay error en el cifrado
@@ -73,19 +72,19 @@ def encrypt_payload(data: dict) -> str:
         # 1. Serializar y codificar datos
         plaintext = json.dumps(data, ensure_ascii=False).encode("utf-8")
         
-        # 2. Generar IV aleatorio (16 bytes)
-        iv = token_bytes(16)
+        # 2. Generar nonce aleatorio (16 bytes)
+        nonce = token_bytes(16)
         
-        # 3. Cifrar con AES-256-CBC
-        cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-        ciphertext = cipher.encrypt(pad(plaintext, 16))
+        # 3. Cifrar con AES-256-GCM (evita padding oracle de CBC)
+        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+        ciphertext, tag = cipher.encrypt_and_digest(plaintext)
         
-        # 4. Calcular HMAC sobre (iv + ciphertext) para autenticar
-        hmac_obj = hmac.new(hmac_key, iv + ciphertext, hashlib.sha256)
+        # 4. Calcular HMAC sobre (nonce + ciphertext + tag) para autenticar
+        hmac_obj = hmac.new(hmac_key, nonce + ciphertext + tag, hashlib.sha256)
         auth_tag = hmac_obj.digest()
         
-        # 5. Retornar: base64(iv + ciphertext + hmac)
-        payload = iv + ciphertext + auth_tag
+        # 5. Retornar: base64(nonce + ciphertext + tag + hmac)
+        payload = nonce + ciphertext + tag + auth_tag
         return base64.urlsafe_b64encode(payload).decode('utf-8')
         
     except CryptoException:
@@ -96,11 +95,11 @@ def encrypt_payload(data: dict) -> str:
 
 def decrypt_payload(encrypted_data: str) -> dict:
     """
-    Descifra un payload cifrado con AES-256-CBC.
+    Descifra un payload cifrado con AES-256-GCM.
     Verifica integridad con HMAC antes de descifrar.
     
     Args:
-        encrypted_data: String en formato base64(iv + ciphertext + hmac)
+        encrypted_data: String en formato base64(nonce + ciphertext + tag + hmac)
         
     Returns:
         Diccionario descifrado
@@ -115,30 +114,32 @@ def decrypt_payload(encrypted_data: str) -> dict:
         # 1. Decodificar Base64
         payload = base64.urlsafe_b64decode(encrypted_data)
         
-        # 2. Extraer componentes: iv (16) + ciphertext (variable) + hmac (32)
-        iv = payload[:16]
+        # 2. Extraer componentes: nonce (16) + ciphertext + tag GCM (16) + hmac (32)
+        nonce = payload[:16]
         auth_tag = payload[-32:]  # HMAC-SHA256 = 32 bytes
-        ciphertext = payload[16:-32]
+        gcm_tag = payload[-48:-32]  # Tag GCM por defecto = 16 bytes
+        ciphertext = payload[16:-48]
+
+        if len(ciphertext) == 0:
+            raise CryptoException("Payload cifrado incompleto")
         
         # 3. Verificar HMAC (prevenir tampering)
-        hmac_obj = hmac.new(hmac_key, iv + ciphertext, hashlib.sha256)
+        hmac_obj = hmac.new(hmac_key, nonce + ciphertext + gcm_tag, hashlib.sha256)
         expected_tag = hmac_obj.digest()
         
         if not hmac.compare_digest(auth_tag, expected_tag):
             raise IntegrityError("HMAC inválido - el payload puede haber sido modificado")
         
-        # 4. Descifrar con AES-256-CBC
-        cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-        plaintext = unpad(cipher.decrypt(ciphertext), 16)
+        # 4. Descifrar y verificar autenticidad con AES-256-GCM
+        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+        plaintext = cipher.decrypt_and_verify(ciphertext, gcm_tag)
         
         # 5. Deserializar JSON
         return json.loads(plaintext.decode('utf-8'))
         
-    except (CryptoException, IntegrityError):
+    except CryptoException:
         raise
     except ValueError as e:
         raise CryptoException(f"Datos cifrados inválidos o corruptos: {str(e)}")
-    except json.JSONDecodeError:
-        raise CryptoException("El plaintext descifrado no es JSON válido")
     except Exception as e:
         raise CryptoException(f"Error descifrando payload: {str(e)}")

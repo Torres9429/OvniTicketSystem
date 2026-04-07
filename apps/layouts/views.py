@@ -9,6 +9,7 @@ from .models import Layouts
 from .selectors import get_layouts_disponibles, get_all_layouts
 
 logger = logging.getLogger(__name__)
+ERROR_LAYOUT_NO_ENCONTRADO = "Layout no encontrado"
 
 class LayoutsViewSet(viewsets.ModelViewSet):
     queryset = Layouts.objects.all()
@@ -69,10 +70,10 @@ class LayoutsViewSet(viewsets.ModelViewSet):
     def update(self, request, pk=None, *args, **kwargs):
         logger.debug(f"PUT /layouts/{pk}/ — payload: {request.data}")
         try:
-            layout = Layouts.objects.get(pk=pk)
+            Layouts.objects.get(pk=pk)
         except Layouts.DoesNotExist:
             logger.warning(f"PUT /layouts/{pk}/ — layout no encontrado")
-            return Response({"error": "Layout no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_LAYOUT_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(layout, data=request.data)
@@ -99,7 +100,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
             layout = Layouts.objects.get(pk=pk)
         except Layouts.DoesNotExist:
             logger.warning(f"PATCH /layouts/{pk}/ — layout no encontrado")
-            return Response({"error": "Layout no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_LAYOUT_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(layout, data=request.data, partial=True)
@@ -123,10 +124,10 @@ class LayoutsViewSet(viewsets.ModelViewSet):
     def destroy(self, request, pk=None, *args, **kwargs):
         logger.debug(f"DELETE /layouts/{pk}/ — solicitud recibida")
         try:
-            layout = Layouts.objects.get(pk=pk)
+            Layouts.objects.get(pk=pk)
         except Layouts.DoesNotExist:
             logger.warning(f"DELETE /layouts/{pk}/ — layout no encontrado")
-            return Response({"error": "Layout no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_LAYOUT_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=["patch"])
     def deactivate(self, request, pk=None):
@@ -151,7 +152,8 @@ class LayoutsViewSet(viewsets.ModelViewSet):
                 {"message": "Layout reactivado correctamente."},
                 status=status.HTTP_200_OK
             )
-        except:
+        except Exception as e:
+            logger.error(f"PATCH /layouts/{pk}/reactivate — error: {e}", exc_info=True)
             return Response(
                 {"error": "Error interno al reactivar el layout"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -163,8 +165,21 @@ class LayoutsViewSet(viewsets.ModelViewSet):
             layouts = get_all_layouts()
             serializer = LayoutsListSerializer(layouts, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        except:
+        except Exception as e:
+            logger.error(f"GET /layouts/all — error: {e}", exc_info=True)
             return Response(
                 {"error": "Error al obtener layouts"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=True, methods=["patch"])
+    def save_snapshot(self, request, pk=None):
+        layout = self.get_object()
+        serializer = LayoutsUpdateSerializer(layout, data=request.data, partial=True)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        layout = actualizar_layout(layout, **serializer.validated_data)
+        output = LayoutsDetailSerializer(layout)
+        return Response(output.data, status=status.HTTP_200_OK)

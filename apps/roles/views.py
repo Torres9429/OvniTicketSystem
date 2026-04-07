@@ -10,6 +10,7 @@ from .services import crear_rol, actualizar_rol, eliminar_rol
 from .selectors import get_all_roles
 
 logger = logging.getLogger(__name__)
+ERROR_ROL_NO_ENCONTRADO = "Rol no encontrado"
 
 
 class RolesViewSet(viewsets.ModelViewSet):
@@ -72,7 +73,7 @@ class RolesViewSet(viewsets.ModelViewSet):
             rol = Roles.objects.get(pk=pk)
         except Roles.DoesNotExist:
             logger.warning(f"PUT /roles/{pk}/ — rol no encontrado")
-            return Response({"error": "Rol no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_ROL_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(rol, data=request.data)
@@ -99,7 +100,7 @@ class RolesViewSet(viewsets.ModelViewSet):
             rol = Roles.objects.get(pk=pk)
         except Roles.DoesNotExist:
             logger.warning(f"PATCH /roles/{pk}/ — rol no encontrado")
-            return Response({"error": "Rol no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_ROL_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(rol, data=request.data, partial=True)
@@ -126,7 +127,7 @@ class RolesViewSet(viewsets.ModelViewSet):
             rol = Roles.objects.get(pk=pk)
         except Roles.DoesNotExist:
             logger.warning(f"DELETE /roles/{pk}/ — rol no encontrado")
-            return Response({"error": "Rol no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_ROL_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             eliminar_rol(rol)

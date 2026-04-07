@@ -7,17 +7,19 @@ from apps.common.permissions import IsAdmin
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 from .models import Usuarios
 from .serializers import (
     UsuariosListSerializer, UsuariosDetailSerializer,
     UsuariosCreateSerializer, UsuariosUpdateSerializer,
-    LoginSerializer,
+    LoginSerializer, CustomTokenRefreshSerializer,
 )
 from .models import Roles
 from .services import crear_usuario, actualizar_usuario, eliminar_usuario, aprobar_usuario, desactivar_usuario
 from .selectors import get_all_usuarios, get_usuarios_por_rol
 
 logger = logging.getLogger(__name__)
+ERROR_USUARIO_NO_ENCONTRADO = "Usuario no encontrado"
 
 
 class RegistroUsuarioView(APIView):
@@ -49,7 +51,7 @@ class RegistroOrganizadorView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
             rol = Roles.objects.get(nombre='organizador')
-            usuario = crear_usuario(
+            crear_usuario(
                 **serializer.validated_data,
                 id_rol=rol,
                 estatus='pendiente'
@@ -130,7 +132,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             usuario = Usuarios.objects.get(pk=pk)
         except Usuarios.DoesNotExist:
             logger.warning(f"PUT /usuarios/{pk}/ — usuario no encontrado")
-            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(usuario, data=request.data)
@@ -157,7 +159,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             usuario = Usuarios.objects.get(pk=pk)
         except Usuarios.DoesNotExist:
             logger.warning(f"PATCH /usuarios/{pk}/ — usuario no encontrado")
-            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         serializer_class = self.get_serializer_class()
         serializer = serializer_class(usuario, data=request.data, partial=True)
@@ -184,7 +186,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             usuario = Usuarios.objects.get(pk=pk)
         except Usuarios.DoesNotExist:
             logger.warning(f"DELETE /usuarios/{pk}/ — usuario no encontrado")
-            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             eliminar_usuario(usuario)
@@ -205,7 +207,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
         try:
             usuario = Usuarios.objects.get(pk=pk)
         except Usuarios.DoesNotExist:
-            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         if usuario.estatus != 'pendiente':
             return Response({"error": "El usuario no está pendiente de aprobación"}, status=status.HTTP_400_BAD_REQUEST)
@@ -219,7 +221,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
         try:
             usuario = Usuarios.objects.get(pk=pk)
         except Usuarios.DoesNotExist:
-            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
 
         usuario = desactivar_usuario(usuario)
         return Response({"message": "Usuario desactivado correctamente"}, status=status.HTTP_200_OK)
@@ -291,3 +293,12 @@ class LoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """
+    Vista personalizada para refrescar tokens JWT.
+    Usa CustomTokenRefreshSerializer para buscar usuarios en Usuarios
+    en lugar del modelo User de Django.
+    """
+    serializer_class = CustomTokenRefreshSerializer

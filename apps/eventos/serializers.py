@@ -72,6 +72,19 @@ class EventosCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'fecha_fin': "La fecha de fin no puede ser anterior o igual a la fecha de inicio."
             })
+            
+        id_lugar = data.get("id_lugar", getattr(self.instance, "id_lugar", None))
+        id_version = data.get("id_version", getattr(self.instance, "id_version", None))
+
+        if id_lugar and id_version and id_version.id_lugar_id != id_lugar.id_lugar:
+            raise serializers.ValidationError({
+                "id_version": "El layout seleccionado no pertenece al lugar del evento."
+            })
+
+        if id_version and str(id_version.estatus).upper() != "PUBLICADO":
+            raise serializers.ValidationError({
+                "id_version": "Solo se puede asignar un layout con estatus PUBLICADO."
+            })
         return data
 
 

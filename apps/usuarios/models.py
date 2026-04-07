@@ -11,7 +11,7 @@ class Usuarios(models.Model):
 
     id_usuario = models.BigAutoField(primary_key=True)
     nombre = models.CharField(max_length=50)
-    apellidos = models.CharField(max_length=60, blank=True, null=True)
+    apellidos = models.CharField(max_length=60, blank=True)
     correo = models.CharField(unique=True, max_length=50)
     contrasena = models.CharField(max_length=255)
     fecha_nacimiento = models.DateField()
