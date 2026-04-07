@@ -55,7 +55,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            layout = crear_layout(**serializer.validated_data)
+            layout = crear_layout(**serializer.validated_data, request=request)
             output = LayoutsDetailSerializer(layout)
             logger.info(f"POST /layouts/ — layout creado con id={layout.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -82,7 +82,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            layout = actualizar_layout(layout, **serializer.validated_data)
+            layout = actualizar_layout(layout, **serializer.validated_data, request=request)
             output = LayoutsDetailSerializer(layout)
             logger.info(f"PUT /layouts/{pk}/ — layout actualizado correctamente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -109,7 +109,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            layout = actualizar_layout(layout, **serializer.validated_data)
+            layout = actualizar_layout(layout, **serializer.validated_data, request=request)
             output = LayoutsDetailSerializer(layout)
             logger.info(f"PATCH /layouts/{pk}/ — layout actualizado parcialmente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -132,7 +132,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
     def deactivate(self, request, pk=None):
         try:
             layout = self.get_object()
-            desactivar_layout(layout=layout)
+            desactivar_layout(layout=layout, id_usuario=request.user, request=request)
             logger.info(f"DELETE /layouts/{pk}/ — layout desactivado")
             return Response({"message": "Layout desactivado correctamente"}, status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
@@ -146,7 +146,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
     def reactivate(self, request, pk=None):
         layout = self.get_object()
         try:
-            activar_layout(layout=layout)
+            activar_layout(layout=layout, id_usuario=request.user, request=request)
             return Response(
                 {"message": "Layout reactivado correctamente."},
                 status=status.HTTP_200_OK

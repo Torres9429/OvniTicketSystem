@@ -9,7 +9,7 @@ class Eventos(models.Model):
     fecha_inicio = models.DateTimeField()
     fecha_fin = models.DateTimeField()
     tiempo_espera = models.IntegerField()
-    foto = models.CharField(max_length=255, blank=True)
+    foto = models.CharField(max_length=255, blank=True, null=True)
     estatus = models.BooleanField(default=1)
     fecha_creacion = models.DateTimeField()
     fecha_actualizacion = models.DateTimeField()

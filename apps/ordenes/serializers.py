@@ -29,13 +29,11 @@ class OrdenesDetailSerializer(serializers.ModelSerializer):
 
 class OrdenesCreateSerializer(serializers.ModelSerializer):
     id_evento = serializers.PrimaryKeyRelatedField(queryset=Eventos.objects.all())
-    id_usuario = serializers.PrimaryKeyRelatedField(queryset=Usuarios.objects.all())
 
     class Meta:
         model = Ordenes
         fields = (
-            'total', 'estatus', 'fecha_creacion', 'fecha_actualizacion',
-            'id_evento', 'id_usuario',
+            'total', 'estatus', 'id_evento'
         )
 
     def validate_total(self, value):
@@ -53,11 +51,10 @@ class OrdenesCreateSerializer(serializers.ModelSerializer):
 
 class OrdenesUpdateSerializer(serializers.ModelSerializer):
     id_evento = serializers.PrimaryKeyRelatedField(queryset=Eventos.objects.all())
-    id_usuario = serializers.PrimaryKeyRelatedField(queryset=Usuarios.objects.all())
 
     class Meta:
         model = Ordenes
-        fields = ('total', 'estatus', 'id_evento', 'id_usuario')
+        fields = ('total', 'estatus', 'id_evento')
 
     def validate_total(self, value):
         if value is None:

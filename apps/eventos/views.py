@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 from django.utils import timezone
-from .services import crear_evento, actualizar_evento, activar_evento, desactivar_evento
+from .services import crear_evento, actualizar_evento, activar_evento, desactivar_evento, eliminar_evento
 from .serializers import (EventosListSerializer, EventosDetailSerializer, EventosCreateSerializer, EventosUpdateSerializer)
 from .models import Eventos
 from .selectors import get_eventos_disponibles, get_all_eventos
@@ -55,7 +55,7 @@ class EventosViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            evento = crear_evento(**serializer.validated_data)
+            evento = crear_evento(**serializer.validated_data, id_usuario=request.user, request=request)
             output = EventosDetailSerializer(evento)
             logger.info(f"POST /eventos/ — evento creado con id={evento.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -82,7 +82,7 @@ class EventosViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            evento = actualizar_evento(evento, **serializer.validated_data)
+            evento = actualizar_evento(evento, **serializer.validated_data, id_usuario=request.user, request=request)
             output = EventosDetailSerializer(evento)
             logger.info(f"PUT /eventos/{pk}/ — evento actualizado correctamente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -110,7 +110,7 @@ class EventosViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            evento = actualizar_evento(evento, **serializer.validated_data)
+            evento = actualizar_evento(evento, **serializer.validated_data, id_usuario=request.user, request=request)
             output = EventosDetailSerializer(evento)
             logger.info(f"PATCH /eventos/{pk}/ — evento actualizado parcialmente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -129,6 +129,16 @@ class EventosViewSet(viewsets.ModelViewSet):
         except Eventos.DoesNotExist:
             logger.warning(f"DELETE /eventos/{pk}/ — evento no encontrado")
             return Response({"error": "No se encontró el evento"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            eliminar_evento(evento=evento, id_usuario=request.user, request=request)
+            logger.info(f"DELETE /eventos/{pk}/ — evento eliminado correctamente")
+            return Response({"message": "Evento eliminado correctamente"}, status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            logger.error(f"DELETE /eventos/{pk}/ — error al eliminar: {e}", exc_info=True)
+            return Response(
+                {"error": "Error interno al eliminar el evento"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 
@@ -136,7 +146,7 @@ class EventosViewSet(viewsets.ModelViewSet):
     def deactivate(self, request, pk=None):
         try:
             evento = self.get_object()
-            desactivar_evento(evento=evento)
+            desactivar_evento(evento=evento, id_usuario=request.user, request=request)
             logger.info(f"DELETE /eventos/{pk}/ — evento desactivado")
             return Response({"message": "Evento desactivado correctamente"}, status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
@@ -150,7 +160,7 @@ class EventosViewSet(viewsets.ModelViewSet):
     def reactivate(self, request, pk=None):
         evento = self.get_object()
         try: 
-            activar_evento(evento=evento)
+            activar_evento(evento=evento, id_usuario=request.user, request=request)
             return Response(
                 {"message": "Evento reactivado correctamente."},
                 status=status.HTTP_200_OK

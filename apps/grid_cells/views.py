@@ -55,7 +55,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            grid_cell = crear_grid_cell(**serializer.validated_data)
+            grid_cell = crear_grid_cell(**serializer.validated_data, id_usuario=request.user, request=request)
             output = GridCellsDetailSerializer(grid_cell)
             logger.info(f"POST /grid-cells/ — celda creada con id={grid_cell.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -82,7 +82,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            grid_cell = actualizar_grid_cell(grid_cell, **serializer.validated_data)
+            grid_cell = actualizar_grid_cell(grid_cell, **serializer.validated_data, id_usuario=request.user, request=request)
             output = GridCellsDetailSerializer(grid_cell)
             logger.info(f"PUT /grid-cells/{pk}/ — celda actualizada")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -109,7 +109,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            grid_cell = actualizar_grid_cell(grid_cell, **serializer.validated_data)
+            grid_cell = actualizar_grid_cell(grid_cell, **serializer.validated_data, id_usuario=request.user, request=request)
             output = GridCellsDetailSerializer(grid_cell)
             logger.info(f"PATCH /grid-cells/{pk}/ — celda actualizada parcialmente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -129,7 +129,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             return Response({"error": not_found_cell}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            eliminar_grid_cell(grid_cell)
+            eliminar_grid_cell(grid_cell, id_usuario=request.user, request=request)
             logger.info(f"DELETE /grid-cells/{pk}/ — celda eliminada")
             return Response(
                 {"message": "Celda eliminada correctamente"},

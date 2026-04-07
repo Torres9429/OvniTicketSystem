@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Asientos
-
+from apps.zonas.models import Zonas
 
 class AsientosListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -33,6 +33,8 @@ class AsientosCreateSerializer(serializers.ModelSerializer):
 
 
 class AsientosUpdateSerializer(serializers.ModelSerializer):
+    id_zona = serializers.PrimaryKeyRelatedField(queryset=Zonas.objects.all())
+    
     class Meta:
         model = Asientos
         fields = ('grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_zona')

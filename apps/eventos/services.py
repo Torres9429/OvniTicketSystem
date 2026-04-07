@@ -1,7 +1,11 @@
-from .models import Eventos
 
-def crear_evento(nombre: str, descripcion: str, fecha_inicio, fecha_fin, tiempo_espera: int, foto: str, id_lugar, id_version, estatus: bool, fecha_creacion, fecha_actualizacion):
-    return Eventos.objects.create(
+from django.utils import timezone
+from .models import Eventos
+from apps.auditoria_logs.services import registrar_auditoria
+
+def crear_evento(nombre: str, descripcion: str, fecha_inicio, fecha_fin, tiempo_espera: int, foto: str, id_lugar, id_version, estatus: bool, id_usuario, request=None) -> Eventos:
+    now = timezone.now()
+    evento = Eventos.objects.create(
         nombre=nombre,
         descripcion=descripcion,
         fecha_inicio=fecha_inicio,
@@ -11,11 +15,22 @@ def crear_evento(nombre: str, descripcion: str, fecha_inicio, fecha_fin, tiempo_
         id_lugar_id=id_lugar.pk,
         id_version_id=id_version.pk,
         estatus = estatus,
-        fecha_creacion = fecha_creacion,
-        fecha_actualizacion = fecha_actualizacion
+        fecha_creacion = now,
+        fecha_actualizacion = now
     )
+    if id_usuario:
+        registrar_auditoria(
+            entidad='eventos',
+            accion='CREAR',
+            id_usuario=id_usuario,
+            valores_antes=None,
+            valores_despues={'nombre': evento.nombre, 'descripcion': evento.descripcion, 'fecha_inicio': str(evento.fecha_inicio), 'fecha_fin': str(evento.fecha_fin), 'tiempo_espera': evento.tiempo_espera, 'foto': evento.foto, 'id_lugar': id_lugar.nombre, 'id_version': id_version.version, 'estatus': evento.estatus},
+            ip=request,
+        )
+    return evento
 
-def actualizar_evento(evento: Eventos, nombre: str, descripcion: str, fecha_inicio, fecha_fin, tiempo_espera: int, foto: str, estatus: bool, id_lugar: int, id_version: int) -> Eventos:
+def actualizar_evento(evento: Eventos, nombre: str, descripcion: str, fecha_inicio, fecha_fin, tiempo_espera: int, foto: str, estatus: bool, id_lugar: int, id_version: int, id_usuario=None, request=None) -> Eventos:
+    valores_antes = {'nombre': evento.nombre, 'descripcion': evento.descripcion, 'fecha_inicio': str(evento.fecha_inicio), 'fecha_fin': str(evento.fecha_fin), 'tiempo_espera': evento.tiempo_espera, 'foto': evento.foto, 'id_lugar': evento.id_lugar.pk, 'id_version': evento.id_version.pk, 'estatus': evento.estatus}
     evento.nombre = nombre
     evento.descripcion = descripcion
     evento.fecha_inicio = fecha_inicio
@@ -26,14 +41,56 @@ def actualizar_evento(evento: Eventos, nombre: str, descripcion: str, fecha_inic
     evento.id_lugar = id_lugar
     evento.id_version = id_version
     evento.save( update_fields=['nombre', 'descripcion', 'fecha_inicio', 'fecha_fin', 'tiempo_espera', 'foto', 'estatus', 'id_lugar', 'id_version', 'fecha_actualizacion'])
+    if id_usuario:
+        registrar_auditoria(
+            entidad='eventos',
+            accion='ACTUALIZAR',
+            id_usuario=id_usuario,
+            valores_antes=valores_antes,
+            valores_despues={'nombre': evento.nombre, 'descripcion': evento.descripcion, 'fecha_inicio': str(evento.fecha_inicio), 'fecha_fin': str(evento.fecha_fin), 'tiempo_espera': evento.tiempo_espera, 'foto': evento.foto, 'id_lugar': id_lugar.pk, 'id_version': id_version.pk, 'estatus': evento.estatus},
+            ip=request,
+        )
     return evento
 
-def desactivar_evento(evento: Eventos) -> Eventos:
+def eliminar_evento(evento: Eventos, id_usuario=None, request=None) -> None:
+    valores_antes = {'nombre': evento.nombre, 'descripcion': evento.descripcion, 'fecha_inicio': str(evento.fecha_inicio), 'fecha_fin': str(evento.fecha_fin), 'tiempo_espera': evento.tiempo_espera, 'foto': evento.foto, 'id_lugar': evento.id_lugar.pk, 'id_version': evento.id_version.pk, 'estatus': evento.estatus}
+    if id_usuario:
+        registrar_auditoria(
+            entidad='eventos',
+            accion='ELIMINAR',
+            id_usuario=id_usuario,
+            valores_antes=valores_antes,
+            valores_despues=None,
+            ip=request,
+        )
+    evento.delete()
+
+def desactivar_evento(evento: Eventos, id_usuario=None, request=None) -> Eventos:
+    valores_antes = {'estatus': evento.estatus, 'fecha_actualizacion': str(evento.fecha_actualizacion)}
     evento.estatus = False
     evento.save(update_fields=['estatus', 'fecha_actualizacion'])
+    if id_usuario:
+        registrar_auditoria(
+            entidad='eventos',
+            accion='DESACTIVAR',
+            id_usuario=id_usuario,
+            valores_antes=valores_antes,
+            valores_despues={'estatus': False, 'fecha_actualizacion': str(evento.fecha_actualizacion)},
+            ip=request,
+        )
     return evento
 
-def activar_evento(evento: Eventos) -> Eventos:
+def activar_evento(evento: Eventos, id_usuario=None, request=None) -> Eventos:
+    valores_antes = {'estatus': evento.estatus, 'fecha_actualizacion': str(evento.fecha_actualizacion)}
     evento.estatus = True
     evento.save(update_fields=['estatus', 'fecha_actualizacion'])
+    if id_usuario:
+        registrar_auditoria(
+            entidad='eventos',
+            accion='ACTIVAR',
+            id_usuario=id_usuario,
+            valores_antes=valores_antes,
+            valores_despues={'estatus': True, 'fecha_actualizacion': str(evento.fecha_actualizacion)},
+            ip=request,
+        )
     return evento
