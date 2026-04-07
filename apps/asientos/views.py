@@ -40,7 +40,7 @@ class AsientosViewSet(viewsets.ViewSet):
     def create(self, request):
         serializer = self.get_serializer_class()(data=request.data)
         serializer.is_valid(raise_exception=True)
-        asiento = create_asiento(serializer.validated_data)
+        asiento = create_asiento(serializer.validated_data, id_usuario=request.user, request=request)
         return Response(AsientosDetailSerializer(asiento).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, pk=None):
@@ -49,12 +49,12 @@ class AsientosViewSet(viewsets.ViewSet):
             return Response({'error': 'Asiento no encontrado'}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer_class()(data=request.data)
         serializer.is_valid(raise_exception=True)
-        asiento = update_asiento(asiento, serializer.validated_data)
+        asiento = update_asiento(asiento, serializer.validated_data, id_usuario=request.user, request=request)
         return Response(AsientosDetailSerializer(asiento).data)
 
     def destroy(self, request, pk=None):
         asiento = get_asiento_by_id(pk)
         if not asiento:
             return Response({'error': 'No se pudo encontrar el asiento'}, status=status.HTTP_404_NOT_FOUND)
-        delete_asiento(asiento)
+        delete_asiento(asiento, id_usuario=request.user, request=request)
         return Response(status=status.HTTP_204_NO_CONTENT)

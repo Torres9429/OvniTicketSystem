@@ -55,7 +55,7 @@ class RolesViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            rol = crear_rol(**serializer.validated_data)
+            rol = crear_rol(**serializer.validated_data, id_usuario=request.user, request=request)
             output = RolesDetailSerializer(rol)
             logger.info(f"POST /roles/ — rol creado con id={rol.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
@@ -82,7 +82,7 @@ class RolesViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            rol = actualizar_rol(rol, **serializer.validated_data)
+            rol = actualizar_rol(rol, **serializer.validated_data, id_usuario=request.user, request=request )
             output = RolesDetailSerializer(rol)
             logger.info(f"PUT /roles/{pk}/ — rol actualizado correctamente")
             return Response(output.data, status=status.HTTP_200_OK)
@@ -129,7 +129,7 @@ class RolesViewSet(viewsets.ModelViewSet):
             return Response({"error": "Rol no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            eliminar_rol(rol)
+            eliminar_rol(rol, id_usuario=request.user, request=request)
             logger.info(f"DELETE /roles/{pk}/ — rol eliminado")
             return Response(
                 {"message": "Rol eliminado correctamente"},

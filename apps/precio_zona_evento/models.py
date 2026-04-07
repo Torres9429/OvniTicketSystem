@@ -6,7 +6,7 @@ from apps.zonas.models import Zonas
 class PrecioZonaEvento(models.Model):
     id_precio_zona_evento = models.BigAutoField(primary_key=True)
     precio = models.FloatField()
-    fecha_creación = models.DateTimeField()
+    fecha_creacion = models.DateTimeField()
     fecha_actualizacion = models.DateTimeField()
     id_zona = models.ForeignKey(Zonas, on_delete=models.DO_NOTHING, db_column='id_zona')
     id_evento = models.ForeignKey(Eventos, on_delete=models.DO_NOTHING, db_column='id_evento')
