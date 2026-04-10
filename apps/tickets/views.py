@@ -7,7 +7,7 @@ from .serializers import (
     TicketsListSerializer, TicketsDetailSerializer,
     TicketsCreateSerializer, TicketsUpdateSerializer,
 )
-from .services import crear_ticket, actualizar_ticket, eliminar_ticket
+from .services import crear_ticket, actualizar_ticket, eliminar_ticket, AsientoNoDisponibleError
 from .selectors import get_all_tickets, get_tickets_por_orden, get_tickets_por_evento
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,9 @@ class TicketsViewSet(viewsets.ModelViewSet):
             output = TicketsDetailSerializer(ticket)
             logger.info(f"POST /tickets/ — ticket creado con id={ticket.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
+        except AsientoNoDisponibleError as e:
+            logger.warning(f"POST /tickets/ — asiento no disponible: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
         except Exception as e:
             logger.error(f"POST /tickets/ — error al crear ticket: {e}", exc_info=True)
             return Response(
