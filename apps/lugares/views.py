@@ -70,7 +70,7 @@ class LugaresViewSet(viewsets.ModelViewSet):
     def update(self, request, pk=None, *args, **kwargs):
         logger.debug(f"PUT /lugares/{pk}/ — payload: {request.data}")
         try:
-            Lugares.objects.get(pk=pk)
+            lugar = Lugares.objects.get(pk=pk)
         except Lugares.DoesNotExist:
             logger.warning(f"PUT /lugares/{pk}/ — lugar no encontrado")
             return Response({"error": ERROR_LUGAR_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
