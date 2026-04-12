@@ -21,7 +21,7 @@ class Eventos(models.Model):
     fecha_inicio = models.DateTimeField()
     fecha_fin = models.DateTimeField()
     tiempo_espera = models.IntegerField()
-    foto = models.CharField(max_length=255, blank=True, null=True)
+    foto = models.TextField(blank=True, null=True)
     estatus = models.CharField(max_length=10, choices=ESTATUS_CHOICES)
     fecha_creacion = models.DateTimeField()
     fecha_actualizacion = models.DateTimeField()

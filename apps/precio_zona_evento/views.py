@@ -1,13 +1,20 @@
 import logging
 from rest_framework import viewsets, status
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from apps.common.permissions import IsOrganizador
 from .services import crear_precio_zona_evento, actualizar_precio_zona_evento, eliminar_precio_zona_evento
 from .selectors import get_all_precio_zona_evento, buscar_precio_zona_evento_por_id
 from .serializers import (PrecioZonaEventoSerializer, PrecioZonaEventoListSerializer, PrecioZonaEventoCreateSerializer, PrecioZonaEventoUpdateSerializer, PrecioZonaEventoDetailSerializer)
-from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
 
 class PrecioZonaEventoViewSet(viewsets.ViewSet):
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()]
+        return [IsOrganizador()]
     def get_serializer_class(self):
         if self.action == "list":
             return PrecioZonaEventoListSerializer
@@ -28,7 +35,7 @@ class PrecioZonaEventoViewSet(viewsets.ViewSet):
         precio_zona_evento = buscar_precio_zona_evento_por_id(pk)
         if not precio_zona_evento:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        serializer = self.get_serializer_class()(precio_zona_evento, many=True)
+        serializer = self.get_serializer_class()(precio_zona_evento)
         return Response(serializer.data)
     
     def create(self, request, *args, **kwargs):
@@ -61,7 +68,7 @@ class PrecioZonaEventoViewSet(viewsets.ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer_class()(data=request.data)
         if serializer.is_valid():
-            precio_zona_evento_actualizado = actualizar_precio_zona_evento(precio_zona_evento[0], **serializer.validated_data, id_usuario=request.user, request=request)
+            precio_zona_evento_actualizado = actualizar_precio_zona_evento(precio_zona_evento, **serializer.validated_data, id_usuario=request.user, request=request)
             return Response(PrecioZonaEventoSerializer(precio_zona_evento_actualizado).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -69,5 +76,5 @@ class PrecioZonaEventoViewSet(viewsets.ViewSet):
         precio_zona_evento = buscar_precio_zona_evento_por_id(pk)
         if not precio_zona_evento:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        eliminar_precio_zona_evento(precio_zona_evento[0], id_usuario=request.user, request=request)
+        eliminar_precio_zona_evento(precio_zona_evento, id_usuario=request.user, request=request)
         return Response(status=status.HTTP_204_NO_CONTENT)

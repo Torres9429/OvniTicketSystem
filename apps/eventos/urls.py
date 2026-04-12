@@ -6,4 +6,7 @@ from .views import EventosViewSet
 router = DefaultRouter()
 router.register(r'eventos', EventosViewSet, basename='eventos')
 
-urlpatterns = router.urls
+#urlpatterns = router.urls
+urlpatterns = [
+    path('eventos/by-cliente', EventosViewSet.as_view({'get': 'por_cliente'}), name='eventos-by-cliente'),
+] + router.urls

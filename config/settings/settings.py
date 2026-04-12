@@ -16,7 +16,6 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', cast=bool)
 
-ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -117,9 +116,18 @@ PASSWORD_HASHERS = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:3000",
+    origin.strip()
+    for origin in config(
+        'CORS_ORIGINS',
+        default='http://localhost:5173,http://localhost:5174,http://localhost:3000',
+    ).split(',')
+    if origin.strip()
 ]
+
+ALLOWED_HOSTS = config(
+    'ALLOWED_HOSTS',
+    default='localhost,127.0.0.1',
+).split(',')
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/

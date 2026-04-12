@@ -1,21 +1,202 @@
 import logging
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.asientos.services import SeatUnavailableError
+from apps.common.permissions import IsAdmin
+
 from .models import Ordenes
-from .serializers import (
-    OrdenesListSerializer, OrdenesDetailSerializer,
-    OrdenesCreateSerializer, OrdenesUpdateSerializer,
-)
-from .services import crear_orden, actualizar_orden, eliminar_orden
+from .purchase import EventPricingError, PaymentFailedError, ejecutar_compra
 from .selectors import get_all_ordenes, get_ordenes_por_evento, get_ordenes_por_usuario
+from .serializers import (
+    OrdenesCreateSerializer,
+    OrdenesDetailSerializer,
+    OrdenesListSerializer,
+    OrdenesUpdateSerializer,
+)
+from .services import actualizar_orden, crear_orden, eliminar_orden
 
 logger = logging.getLogger(__name__)
 ERROR_ORDEN_NO_ENCONTRADA = "Orden no encontrada"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Purchase endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ComprarView(APIView):
+    """
+    POST /api/ordenes/comprar/
+
+    Body
+    ----
+    {
+        "id_evento": <int>,
+        "ids_grid_cell": [<int>, ...],
+        "metodo_pago": "mock"          // optional, defaults to "mock"
+        "token": "<str>"               // optional gateway token
+    }
+
+    Success → 201
+    {
+        "orden": {
+            "id_orden": <int>,
+            "total": <float>,
+            "estatus": "pagado",
+            "fecha_creacion": "<iso8601>"
+        },
+        "tickets": [
+            {
+                "id_ticket": <int>,
+                "precio": <float>,
+                "id_grid_cell": <int>,
+                "id_evento": <int>
+            },
+            ...
+        ],
+        "transaction_id": "<str>"
+    }
+
+    Failure (seat no longer held) → 409
+    Failure (payment declined)    → 402
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        data = request.data
+
+        id_evento = data.get("id_evento")
+        ids_grid_cell = data.get("ids_grid_cell")
+        metodo_pago = data.get("metodo_pago", "mock")
+        token = data.get("token", None)
+        operation_id = data.get("operation_id", None)
+
+        # Validate operation_id if provided
+        if operation_id is not None:
+            if not isinstance(operation_id, str) or len(operation_id) > 64:
+                return Response(
+                    {"error": "'operation_id' debe ser una cadena de hasta 64 caracteres."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Basic input validation
+        if not id_evento or not ids_grid_cell:
+            return Response(
+                {"error": "Se requieren 'id_evento' e 'ids_grid_cell'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(ids_grid_cell, list) or len(ids_grid_cell) == 0:
+            return Response(
+                {"error": "'ids_grid_cell' debe ser una lista no vacía."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        logger.debug(
+            "POST /api/ordenes/comprar/ — usuario=%s evento=%s cells=%s",
+            request.user.pk, id_evento, ids_grid_cell,
+        )
+
+        try:
+            result = ejecutar_compra(
+                id_evento=id_evento,
+                ids_grid_cell=ids_grid_cell,
+                usuario=request.user,
+                metodo_pago=metodo_pago,
+                token=token,
+                operation_id=operation_id,
+                request=request,
+            )
+        except EventPricingError as exc:
+            logger.warning(
+                "POST /api/ordenes/comprar/ — event pricing error: %s (zonas=%s)",
+                exc, exc.zonas_sin_precio,
+            )
+            return Response(
+                {
+                    "error": str(exc),
+                    "codigo": "EVENT_PRICING_MISSING",
+                    "zonas_sin_precio": exc.zonas_sin_precio,
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        except SeatUnavailableError as exc:
+            logger.warning(
+                "POST /api/ordenes/comprar/ — seat unavailable: %s", exc
+            )
+            return Response(
+                {"error": str(exc), "codigo": "SEAT_UNAVAILABLE"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except PaymentFailedError as exc:
+            logger.warning(
+                "POST /api/ordenes/comprar/ — payment failed: %s (gateway: %s)",
+                exc, exc.gateway_error,
+            )
+            return Response(
+                {"error": str(exc), "detalle": exc.gateway_error},
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+        except Exception as exc:
+            logger.error(
+                "POST /api/ordenes/comprar/ — unexpected error: %s",
+                exc, exc_info=True,
+            )
+            return Response(
+                {"error": "Error interno al procesar la compra."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        orden = result["orden"]
+        tickets = result["tickets"]
+        transaction_id = result.get("transaction_id", "")
+
+        logger.info(
+            "POST /api/ordenes/comprar/ — orden=%s tickets=%s usuario=%s",
+            orden.pk, [t.pk for t in tickets], request.user.pk,
+        )
+
+        return Response(
+            {
+                "orden": {
+                    "id_orden": orden.pk,
+                    "total": orden.total,
+                    "estatus": orden.estatus,
+                    "fecha_creacion": orden.fecha_creacion.isoformat() if orden.fecha_creacion else None,
+                },
+                "tickets": [
+                    {
+                        "id_ticket": t.pk,
+                        "precio": t.precio,
+                        "id_grid_cell": t.id_grid_cell_id,
+                        "id_evento": t.id_evento_id,
+                    }
+                    for t in tickets
+                ],
+                "transaction_id": transaction_id,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Standard CRUD viewset
+# ─────────────────────────────────────────────────────────────────────────────
+
 class OrdenesViewSet(viewsets.ModelViewSet):
     queryset = Ordenes.objects.all()
+
+    def get_permissions(self):
+        if self.action in (
+            'create', 'list', 'retrieve',
+            'detalle', 'por_usuario', 'mis_ventas',
+        ):
+            return [IsAuthenticated()]
+        return [IsAdmin()]
 
     def get_queryset(self):
         return Ordenes.objects.all()
@@ -143,6 +324,228 @@ class OrdenesViewSet(viewsets.ModelViewSet):
                 {"error": "Error interno al eliminar la orden"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    @action(detail=False, methods=["get"], url_path="mis-ventas")
+    def mis_ventas(self, request):
+        """GET /api/ordenes/mis-ventas/
+        Sales dashboard for the authenticated organizer. Aggregates all orders
+        and tickets across events whose venue is owned by request.user.
+
+        Response:
+        {
+          "resumen": {
+            "total_vendido": float,
+            "boletos_vendidos": int,
+            "ordenes_pagadas": int,
+            "ordenes_pendientes": int,
+            "eventos_totales": int,
+            "eventos_con_ventas": int,
+          },
+          "eventos": [
+            {
+              "id_evento", "nombre", "fecha_inicio", "estatus",
+              "boletos_vendidos", "asientos_totales", "ocupacion_pct", "revenue"
+            }, ...
+          ],
+          "ordenes_recientes": [
+            {
+              "id_orden", "fecha_creacion", "id_evento", "nombre_evento",
+              "total", "estatus", "comprador"
+            }, ...10 máx
+          ]
+        }
+        """
+        from django.db.models import Sum, Count
+        from apps.eventos.models import Eventos
+        from apps.tickets.models import Tickets
+        from apps.grid_cells.models import GridCells
+
+        usuario = request.user
+
+        # Eventos cuyos lugares son del usuario
+        eventos_qs = Eventos.objects.filter(
+            id_lugar__id_dueno=usuario
+        ).order_by('-fecha_inicio')
+
+        evento_ids = list(eventos_qs.values_list('id_evento', flat=True))
+
+        ordenes_pagadas = Ordenes.objects.filter(
+            id_evento__in=evento_ids,
+            estatus=Ordenes.ESTATUS_PAGADO,
+        )
+        ordenes_pendientes_count = Ordenes.objects.filter(
+            id_evento__in=evento_ids,
+            estatus=Ordenes.ESTATUS_PENDIENTE,
+        ).count()
+
+        agregados = ordenes_pagadas.aggregate(
+            total_vendido=Sum('total'),
+            ordenes_count=Count('id_orden'),
+        )
+        total_vendido = float(agregados['total_vendido'] or 0)
+        ordenes_pagadas_count = int(agregados['ordenes_count'] or 0)
+
+        boletos_vendidos = Tickets.objects.filter(
+            id_orden__in=ordenes_pagadas
+        ).count()
+
+        # Resumen por evento
+        eventos_payload = []
+        for ev in eventos_qs:
+            ev_ordenes_pagadas = ordenes_pagadas.filter(id_evento=ev)
+            ev_revenue = float(
+                ev_ordenes_pagadas.aggregate(total=Sum('total'))['total'] or 0
+            )
+            ev_tickets = Tickets.objects.filter(
+                id_orden__in=ev_ordenes_pagadas
+            ).count()
+
+            capacidad = GridCells.objects.filter(
+                id_layout=ev.id_version_id, tipo='ZONA DE ASIENTOS'
+            ).count()
+            ocupacion = round((ev_tickets / capacidad) * 100, 1) if capacidad else 0.0
+
+            eventos_payload.append({
+                "id_evento": ev.pk,
+                "nombre": ev.nombre,
+                "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
+                "estatus": ev.estatus,
+                "boletos_vendidos": ev_tickets,
+                "asientos_totales": capacidad,
+                "ocupacion_pct": ocupacion,
+                "revenue": ev_revenue,
+            })
+
+        eventos_con_ventas = sum(1 for e in eventos_payload if e["boletos_vendidos"] > 0)
+
+        # Órdenes recientes (últimas 10 pagadas)
+        eventos_nombre_map = {e.pk: e.nombre for e in eventos_qs}
+        recientes = list(ordenes_pagadas.order_by('-fecha_creacion')[:10])
+        ordenes_recientes_payload = []
+        for o in recientes:
+            comprador = None
+            try:
+                if o.id_usuario_id:
+                    comprador = o.id_usuario.correo
+            except Exception:
+                pass
+            ordenes_recientes_payload.append({
+                "id_orden": o.pk,
+                "fecha_creacion": o.fecha_creacion.isoformat() if o.fecha_creacion else None,
+                "id_evento": o.id_evento_id,
+                "nombre_evento": eventos_nombre_map.get(
+                    o.id_evento_id, f"Evento #{o.id_evento_id}"
+                ),
+                "total": float(o.total or 0),
+                "estatus": o.estatus,
+                "comprador": comprador,
+            })
+
+        return Response(
+            {
+                "resumen": {
+                    "total_vendido": total_vendido,
+                    "boletos_vendidos": boletos_vendidos,
+                    "ordenes_pagadas": ordenes_pagadas_count,
+                    "ordenes_pendientes": ordenes_pendientes_count,
+                    "eventos_totales": len(eventos_payload),
+                    "eventos_con_ventas": eventos_con_ventas,
+                },
+                "eventos": eventos_payload,
+                "ordenes_recientes": ordenes_recientes_payload,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"], url_path="detalle")
+    def detalle(self, request, pk=None):
+        """GET /api/ordenes/<id>/detalle/ — returns full order with tickets + event.
+        This is the authoritative source for the confirmation/receipt page
+        instead of relying on navigation state that can get corrupted."""
+        from apps.tickets.models import Tickets
+        from apps.eventos.models import Eventos
+        from apps.zonas.models import Zonas
+        from apps.grid_cells.models import GridCells
+
+        try:
+            orden = Ordenes.objects.get(pk=pk)
+        except Ordenes.DoesNotExist:
+            return Response(
+                {"error": ERROR_ORDEN_NO_ENCONTRADA},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Authorization: user can only see their own order (or admin sees all)
+        is_admin = getattr(request.user, "id_rol_id", None) and str(
+            getattr(request.user.id_rol, "nombre", "")
+        ).lower() == "admin"
+        if not is_admin and orden.id_usuario_id != request.user.pk:
+            return Response(
+                {"error": "No tienes permiso para ver esta orden."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tickets = list(Tickets.objects.filter(id_orden=orden))
+
+        # Enrich tickets with zone info (via grid_cell → zona)
+        grid_cell_ids = [t.id_grid_cell_id for t in tickets if t.id_grid_cell_id]
+        grid_cells_by_id = {}
+        zonas_by_id = {}
+        if grid_cell_ids:
+            for gc in GridCells.objects.filter(id_grid_cells__in=grid_cell_ids):
+                grid_cells_by_id[gc.id_grid_cells] = gc
+            zona_ids = {gc.id_zona_id for gc in grid_cells_by_id.values() if gc.id_zona_id}
+            if zona_ids:
+                for z in Zonas.objects.filter(pk__in=zona_ids):
+                    zonas_by_id[z.pk] = z
+
+        tickets_payload = []
+        for t in tickets:
+            gc = grid_cells_by_id.get(t.id_grid_cell_id)
+            zona = zonas_by_id.get(gc.id_zona_id) if gc else None
+            label = None
+            if gc is not None and gc.row is not None and gc.col is not None:
+                label = f"F{gc.row + 1}-C{gc.col + 1}"
+            tickets_payload.append(
+                {
+                    "id_ticket": t.pk,
+                    "precio": float(t.precio) if t.precio is not None else 0.0,
+                    "id_grid_cell": t.id_grid_cell_id,
+                    "id_evento": t.id_evento_id,
+                    "label": label,
+                    "zona": zona.nombre if zona else None,
+                }
+            )
+
+        # Event info
+        evento_payload = None
+        try:
+            ev = Eventos.objects.get(pk=orden.id_evento_id)
+            evento_payload = {
+                "id_evento": ev.pk,
+                "nombre": ev.nombre,
+                "descripcion": ev.descripcion,
+                "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
+                "fecha_fin": ev.fecha_fin.isoformat() if ev.fecha_fin else None,
+                "estatus": ev.estatus,
+            }
+        except Eventos.DoesNotExist:
+            pass
+
+        return Response(
+            {
+                "orden": {
+                    "id_orden": orden.pk,
+                    "total": float(orden.total) if orden.total is not None else 0.0,
+                    "estatus": orden.estatus,
+                    "fecha_creacion": orden.fecha_creacion.isoformat() if orden.fecha_creacion else None,
+                    "operation_id": orden.operation_id,
+                },
+                "tickets": tickets_payload,
+                "evento": evento_payload,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["get"], url_path="por-evento/(?P<id_evento>[^/.]+)")
     def por_evento(self, request, id_evento=None):

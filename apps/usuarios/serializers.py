@@ -11,7 +11,7 @@ ERROR_CORREO_OBLIGATORIO = "El correo es obligatorio."
 class UsuariosListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuarios
-        fields = ('id_usuario', 'nombre', 'apellidos', 'correo', 'id_rol')
+        fields = ('id_usuario', 'nombre', 'apellidos', 'correo', 'id_rol', 'estatus')
 
 
 class UsuariosDetailSerializer(serializers.ModelSerializer):

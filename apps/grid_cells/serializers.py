@@ -3,7 +3,7 @@ from .models import GridCells
 from apps.zonas.models import Zonas
 from apps.layouts.models import Layouts
 
-TIPOS_VALIDOS = ['VACÍO', 'PASILLO', 'ESCENARIO', 'ZONA DE ASIENTOS']
+TIPOS_VALIDOS = ['VACÍO', 'VACIO', 'PASILLO', 'ESCENARIO', 'ZONA DE ASIENTOS']
 
 
 class GridCellsSerializer(serializers.ModelSerializer):
@@ -26,7 +26,7 @@ class GridCellsDetailSerializer(serializers.ModelSerializer):
 
 
 class GridCellsCreateSerializer(serializers.ModelSerializer):
-    id_zona   = serializers.PrimaryKeyRelatedField(queryset=Zonas.objects.all())
+    id_zona   = serializers.PrimaryKeyRelatedField(queryset=Zonas.objects.all(), required=False, allow_null=True)
     id_layout = serializers.PrimaryKeyRelatedField(queryset=Layouts.objects.all())
 
     class Meta:
@@ -69,7 +69,7 @@ class GridCellsCreateSerializer(serializers.ModelSerializer):
 
 
 class GridCellsUpdateSerializer(serializers.ModelSerializer):
-    id_zona   = serializers.PrimaryKeyRelatedField(queryset=Zonas.objects.all())
+    id_zona   = serializers.PrimaryKeyRelatedField(queryset=Zonas.objects.all(), required=False, allow_null=True)
     id_layout = serializers.PrimaryKeyRelatedField(queryset=Layouts.objects.all())
 
     class Meta:

@@ -6,8 +6,7 @@ def get_all_precio_zona_evento():
     return precio_zona_evento
 
 def buscar_precio_zona_evento_por_id(id_precio_zona_evento):
-    precio_zona_evento = PrecioZonaEvento.objects.filter(id_precio_zona_evento=id_precio_zona_evento)
-    return precio_zona_evento
+    return PrecioZonaEvento.objects.filter(id_precio_zona_evento=id_precio_zona_evento).first()
 
 def buscar_precio_zona_evento_por_id_zona(id_zona: int):
     precio_zona_evento = PrecioZonaEvento.objects.filter(id_zona=id_zona)

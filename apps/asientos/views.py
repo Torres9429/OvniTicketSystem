@@ -1,18 +1,36 @@
-from django.shortcuts import render
+import logging
 
 from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.common.permissions import IsOrganizador
 from .selectors import get_all_asientos, get_asiento_by_id
-from .services import create_asiento, update_asiento, delete_asiento
+from .models import EstadoAsientoEvento
+from .services import (
+    create_asiento, update_asiento, delete_asiento,
+    obtener_disponibilidad_evento, inicializar_estado_asientos,
+    retener_asientos, confirmar_compra, liberar_asientos_usuario,
+    SeatUnavailableError, _liberar_expirados,
+)
 from .serializers import (
     AsientosListSerializer,
     AsientosDetailSerializer,
     AsientosCreateSerializer,
-    AsientosUpdateSerializer
+    AsientosUpdateSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AsientosViewSet(viewsets.ViewSet):
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated()]
+        return [IsOrganizador()]
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -58,3 +76,130 @@ class AsientosViewSet(viewsets.ViewSet):
             return Response({'error': 'No se pudo encontrar el asiento'}, status=status.HTTP_404_NOT_FOUND)
         delete_asiento(asiento, id_usuario=request.user, request=request)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ───────────────── Seat availability & reservation endpoints ─────────────────
+
+class DisponibilidadAsientosView(APIView):
+    """GET /api/asientos/disponibilidad/<id_evento>/
+    Returns seat states for an event. Auto-initialises state rows if needed."""
+    permission_classes = [AllowAny]
+
+    def get(self, request, id_evento):
+        from apps.eventos.models import Eventos
+        try:
+            evento = Eventos.objects.get(pk=id_evento)
+        except Eventos.DoesNotExist:
+            return Response({'error': 'Evento no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Lazy-initialise seat states from the event's layout
+        inicializar_estado_asientos(id_evento, evento.id_version_id)
+
+        disponibilidad = list(obtener_disponibilidad_evento(id_evento))
+        return Response(disponibilidad, status=status.HTTP_200_OK)
+
+
+class RetenerAsientosView(APIView):
+    """POST /api/asientos/retener/
+    Body: { id_evento, ids_grid_cell: [int, ...] }"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        id_evento = request.data.get('id_evento')
+        ids_grid_cell = request.data.get('ids_grid_cell', [])
+
+        if not id_evento or not ids_grid_cell:
+            return Response(
+                {'error': 'id_evento e ids_grid_cell son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = retener_asientos(id_evento, ids_grid_cell, request.user)
+            return Response(
+                {
+                    'message': 'Asientos retenidos correctamente.',
+                    'retenido_hasta': result['retenido_hasta'],
+                    'ids_grid_cell': result['ids_grid_cell'],
+                },
+                status=status.HTTP_200_OK,
+            )
+        except SeatUnavailableError as e:
+            return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
+
+
+class LiberarAsientosView(APIView):
+    """POST /api/asientos/liberar/
+    Body: { id_evento }"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        id_evento = request.data.get('id_evento')
+        if not id_evento:
+            return Response({'error': 'id_evento es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        count = liberar_asientos_usuario(id_evento, request.user)
+        return Response({'message': f'{count} asiento(s) liberado(s).'}, status=status.HTTP_200_OK)
+
+
+class ConfirmarCompraView(APIView):
+    """POST /api/asientos/confirmar/
+    Body: { id_evento, ids_grid_cell: [int, ...] }"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        id_evento = request.data.get('id_evento')
+        ids_grid_cell = request.data.get('ids_grid_cell', [])
+
+        if not id_evento or not ids_grid_cell:
+            return Response(
+                {'error': 'id_evento e ids_grid_cell son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            confirmar_compra(id_evento, ids_grid_cell, request.user)
+            return Response({'message': 'Compra confirmada.'}, status=status.HTTP_200_OK)
+        except SeatUnavailableError as e:
+            return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
+
+
+class HoldStatusView(APIView):
+    """GET /api/asientos/hold-status/<int:id_evento>/
+    Returns the current hold state for the authenticated user for a given event."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id_evento):
+        # Release stale holds first so they don't appear as active
+        _liberar_expirados(id_evento)
+
+        holds = list(
+            EstadoAsientoEvento.objects.filter(
+                id_evento=id_evento,
+                estado=EstadoAsientoEvento.RETENIDO,
+                retenido_por=request.user,
+            )
+        )
+
+        if not holds:
+            return Response(
+                {
+                    'tiene_retencion': False,
+                    'retenido_hasta': None,
+                    'ids_grid_cell': [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Use the MAX retenido_hasta in case of multiple rows (shouldn't happen in practice)
+        max_expiry = max(h.retenido_hasta for h in holds)
+        ids_grid_cell = [h.id_grid_cell_id for h in holds]
+
+        return Response(
+            {
+                'tiene_retencion': True,
+                'retenido_hasta': max_expiry.isoformat(),
+                'ids_grid_cell': ids_grid_cell,
+            },
+            status=status.HTTP_200_OK,
+        )

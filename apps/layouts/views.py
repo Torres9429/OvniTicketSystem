@@ -1,9 +1,11 @@
 import logging
 from rest_framework.decorators import action
 from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.utils import timezone
+from apps.common.permissions import IsOrganizador
 from .services import crear_layout, actualizar_layout, activar_layout, desactivar_layout
 from .serializers import (LayoutsListSerializer, LayoutsDetailSerializer, LayoutsCreateSerializer, LayoutsUpdateSerializer)
 from .models import Layouts
@@ -14,6 +16,11 @@ ERROR_LAYOUT_NO_ENCONTRADO = "Layout no encontrado"
 
 class LayoutsViewSet(viewsets.ModelViewSet):
     queryset = Layouts.objects.all()
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated()]
+        return [IsOrganizador()]
 
     def get_queryset(self):
         if self.action == "list":
@@ -181,7 +188,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        layout = actualizar_layout(layout, **serializer.validated_data)
+        layout = actualizar_layout(layout, **serializer.validated_data, request=request)
         output = LayoutsDetailSerializer(layout)
         return Response(output.data, status=status.HTTP_200_OK)
 
@@ -195,10 +202,11 @@ class LayoutUltimaVersionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        layout = get_ultima_version_layout_por_lugar(id_lugar)
+        include_drafts = request.query_params.get('include_drafts', 'false').lower() == 'true'
+        layout = get_ultima_version_layout_por_lugar(id_lugar, include_drafts=include_drafts)
         if not layout:
             return Response(
-                {"error": "No se encontró un layout publicado para el lugar indicado"},
+                {"error": "No se encontró un layout para el lugar indicado"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 

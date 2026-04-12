@@ -30,8 +30,8 @@ class EventosDetailSerializer(serializers.ModelSerializer):
 
 class EventosCreateSerializer(serializers.ModelSerializer):
     descripcion = serializers.CharField(required=False, allow_null=True, max_length=150)
-    foto = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=255)
-    estatus = serializers.BooleanField(required=False, default=True)
+    foto = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    estatus = serializers.ChoiceField(choices=Eventos.ESTATUS_CHOICES, required=False, default=Eventos.ESTATUS_BORRADOR)
     id_lugar = serializers.PrimaryKeyRelatedField(queryset=Lugares.objects.all())
     id_version = serializers.PrimaryKeyRelatedField(queryset=Layouts.objects.all())
 

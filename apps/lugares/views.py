@@ -1,18 +1,27 @@
 import logging
 from rest_framework.decorators import action
 from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
+from apps.common.permissions import IsOrganizador
 from .services import crear_lugar, actualizar_lugar, activar_lugar, desactivar_lugar
 from .serializers import (LugaresListSerializer, LugaresDetailSerializer, LugaresCreateSerializer, LugaresUpdateSerializer)
 from .models import Lugares
-from .selectors import get_lugares_disponibles, get_all_lugares
+from .selectors import get_lugares_disponibles, get_all_lugares, get_lugares_por_dueno
 
 logger = logging.getLogger(__name__)
 ERROR_LUGAR_NO_ENCONTRADO = "Lugar no encontrado"
 
 class LugaresViewSet(viewsets.ModelViewSet):
     queryset = Lugares.objects.all()
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()]
+        if self.action == 'all':
+            return [IsAuthenticated()]
+        return [IsOrganizador()]
 
     def get_queryset(self):
         if self.action == "list":
@@ -169,5 +178,22 @@ class LugaresViewSet(viewsets.ModelViewSet):
             logger.error(f"GET /lugares/all — error: {e}", exc_info=True)
             return Response(
                 {"error": "Error al obtener lugares"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=["get"], url_path='by-dueno')
+    def por_dueno(self, request):
+        id_dueno = request.query_params.get('id_dueno')
+        if not id_dueno:
+            logger.warning("GET /lugares/by-dueno/ — id_dueno no proporcionado")
+            return Response({"error": "id_dueno es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            lugares = get_lugares_por_dueno(id_dueno=id_dueno)
+            serializer = LugaresListSerializer(lugares, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"GET /lugares/by-dueno/ — error al listar por dueno: {e}", exc_info=True)
+            return Response(
+                {"error": "Error al obtener lugares por dueño"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
