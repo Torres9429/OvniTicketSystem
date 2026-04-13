@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 from django.contrib.auth.hashers import check_password
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -24,7 +25,11 @@ ERROR_USUARIO_NO_ENCONTRADO = "Usuario no encontrado"
 
 
 def _decode_auth_payload(request):
-    ciphertext = request.data.get("ciphertext") if isinstance(request.data, dict) else None
+    ciphertext = request.data.get("ciphertext") if isinstance(request.data, Mapping) else None
+
+    if isinstance(ciphertext, list):
+        ciphertext = ciphertext[0] if ciphertext else None
+
     if not ciphertext:
         return request.data, None
 

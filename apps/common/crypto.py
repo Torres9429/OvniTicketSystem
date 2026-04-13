@@ -17,6 +17,19 @@ class IntegrityError(CryptoException):
     pass
 
 
+def _urlsafe_b64decode_with_padding(value: str) -> bytes:
+    """Decodifica Base64 URL-safe aceptando entradas sin '=' padding."""
+    if not isinstance(value, str):
+        raise CryptoException("Valor Base64 inválido")
+
+    normalized = value.strip()
+    missing_padding = (-len(normalized)) % 4
+    if missing_padding:
+        normalized += "=" * missing_padding
+
+    return base64.urlsafe_b64decode(normalized)
+
+
 def _get_keys():
     """
     Obtiene las claves de cifrado desde Django settings.
@@ -36,8 +49,8 @@ def _get_keys():
             )
         
         # Decodificar de Base64
-        aes_key = base64.urlsafe_b64decode(aes_key_b64)
-        hmac_key = base64.urlsafe_b64decode(hmac_key_b64)
+        aes_key = _urlsafe_b64decode_with_padding(aes_key_b64)
+        hmac_key = _urlsafe_b64decode_with_padding(hmac_key_b64)
         
         # Validar longitud correcta para AES-256
         if len(aes_key) != 32:
@@ -106,7 +119,7 @@ def decrypt_payload(encrypted_data: str) -> dict:
     try:
         aes_key, hmac_key = _get_keys()
         
-        payload = base64.urlsafe_b64decode(encrypted_data)
+        payload = _urlsafe_b64decode_with_padding(encrypted_data)
         
         nonce = payload[:16]
         auth_tag = payload[-32:]
