@@ -16,7 +16,7 @@ from .serializers import (
     LoginSerializer, CustomTokenRefreshSerializer,
 )
 from .models import Roles
-from .services import crear_usuario, actualizar_usuario, eliminar_usuario, aprobar_usuario, desactivar_usuario
+from .services import crear_usuario, actualizar_usuario, eliminar_usuario, aprobar_usuario, desactivar_usuario, reactivar_usuario
 from .selectors import get_all_usuarios, get_usuarios_por_rol
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ class RegistroOrganizadorView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
-            rol = Roles.objects.get(nombre='cliente')
+            rol = Roles.objects.get(nombre='organizador')
             crear_usuario(
                 **serializer.validated_data,
                 id_rol=rol,
@@ -152,16 +152,35 @@ class UsuariosViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            usuario = crear_usuario(**serializer.validated_data, request=request)
+            id_rol_value = request.data.get('id_rol')
+            if not id_rol_value:
+                return Response({"id_rol": ["Este campo es requerido."]}, status=status.HTTP_400_BAD_REQUEST)
+            rol = Roles.objects.get(pk=id_rol_value)
+            usuario = crear_usuario(**serializer.validated_data, id_rol=rol, request=request)
             output = UsuariosDetailSerializer(usuario)
             logger.info(f"POST /usuarios/ — usuario creado con id={usuario.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
+        except Roles.DoesNotExist:
+            return Response({"id_rol": ["Rol no encontrado."]}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"POST /usuarios/ — error al crear usuario: {e}", exc_info=True)
             return Response(
                 {"error": "Error interno al crear el usuario"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    @action(detail=True, methods=["patch"], url_path="reactivar")
+    def reactivar(self, request, pk=None):
+        try:
+            usuario = Usuarios.objects.get(pk=pk)
+        except Usuarios.DoesNotExist:
+            return Response({"error": ERROR_USUARIO_NO_ENCONTRADO}, status=status.HTTP_404_NOT_FOUND)
+
+        if usuario.estatus != 'inactivo':
+            return Response({"error": "El usuario no está inactivo"}, status=status.HTTP_400_BAD_REQUEST)
+
+        usuario = reactivar_usuario(usuario, request=request)
+        return Response({"message": "Usuario reactivado correctamente"}, status=status.HTTP_200_OK)
 
     def update(self, request, pk=None, *args, **kwargs):
         logger.debug(f"PUT /usuarios/{pk}/ — payload: {request.data}")

@@ -5,8 +5,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from apps.common.permissions import IsOrganizador
 from .models import GridCells
+from apps.layouts.models import Layouts
 from .serializers import (GridCellsListSerializer, GridCellsDetailSerializer,  GridCellsCreateSerializer, GridCellsUpdateSerializer)
-from .services import crear_grid_cell, actualizar_grid_cell, eliminar_grid_cell
+from .services import crear_grid_cell, actualizar_grid_cell, eliminar_grid_cell, bulk_crear_grid_cells, eliminar_grid_cells_por_layout
 from .selectors import get_all_grid_cells, get_grid_cells_por_layout
 
 logger = logging.getLogger(__name__)
@@ -162,4 +163,77 @@ class GridCellsViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Error al obtener celdas del layout"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+            
+    @action(detail=False, methods=["post"])
+    def sync(self, request):
+        """
+        Sincroniza las celdas de un layout: elimina las existentes y crea las nuevas.
+        Espera: { id_layout: int, celdas: [{tipo, row, col, id_zona}] }
+        """
+        id_layout = request.data.get('id_layout')
+        celdas = request.data.get('celdas', [])
+
+        if not id_layout:
+            return Response(
+                {"error": "Se requiere id_layout."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            layout_obj = Layouts.objects.get(pk=id_layout)
+        except Layouts.DoesNotExist:
+            return Response(
+                {"error": "Layout no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            eliminadas = eliminar_grid_cells_por_layout(
+                id_layout=id_layout,
+                id_usuario=request.user,
+                request=request,
+            )
+            logger.info(f"POST /grid-cells/sync/ — {eliminadas} celdas eliminadas del layout {id_layout}")
+
+            creados = bulk_crear_grid_cells(
+                celdas=celdas,
+                id_layout_obj=layout_obj,
+                id_usuario=request.user,
+                request=request,
+            )
+            logger.info(f"POST /grid-cells/sync/ — {len(creados)} celdas creadas para layout {id_layout}")
+
+            serializer = GridCellsListSerializer(creados, many=True)
+            return Response(
+                {"eliminadas": eliminadas, "creadas": len(creados), "celdas": serializer.data},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.error(f"POST /grid-cells/sync/ — error: {e}", exc_info=True)
+            return Response(
+                {"error": "Error al sincronizar celdas del layout."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=False, methods=["delete"], url_path="eliminar-por-layout/(?P<id_layout>[^/.]+)")
+    def eliminar_por_layout(self, request, id_layout=None):
+        """Elimina todas las celdas de un layout en una sola operación."""
+        try:
+            cantidad = eliminar_grid_cells_por_layout(
+                id_layout=id_layout,
+                id_usuario=request.user,
+                request=request,
+            )
+            logger.info(f"DELETE /grid-cells/eliminar-por-layout/{id_layout}/ — {cantidad} celdas eliminadas")
+            return Response(
+                {"message": f"{cantidad} celdas eliminadas correctamente."},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.error(f"DELETE /grid-cells/eliminar-por-layout/{id_layout}/ — error: {e}", exc_info=True)
+            return Response(
+                {"error": "Error al eliminar celdas del layout."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
