@@ -48,6 +48,27 @@ class OrdenesCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("El estatus es obligatorio.")
         return value
 
+    def validate(self, attrs):
+        request = self.context.get("request")
+        usuario = getattr(request, "user", None)
+        if not usuario or not getattr(usuario, "pk", None):
+            return attrs
+
+        estatus = attrs.get("estatus", Ordenes.ESTATUS_PENDIENTE)
+        existe_duplicada = Ordenes.objects.filter(
+            id_usuario_id=usuario.pk,
+            id_evento=attrs["id_evento"],
+            total=attrs["total"],
+            estatus=estatus,
+        ).exists()
+
+        if existe_duplicada:
+            raise serializers.ValidationError(
+                "Ya existe una orden con los mismos datos para este usuario y evento."
+            )
+
+        return attrs
+
 
 class OrdenesUpdateSerializer(serializers.ModelSerializer):
     id_evento = serializers.PrimaryKeyRelatedField(queryset=Eventos.objects.all())

@@ -2,7 +2,22 @@ from django.utils import timezone
 from .models import Ordenes
 from apps.auditoria_logs.services import registrar_auditoria
 
+
+class DuplicateOrderError(Exception):
+    pass
+
 def crear_orden(total: float, estatus: str, id_evento, id_usuario, operation_id=None, request=None) -> Ordenes:
+    existe_duplicada = Ordenes.objects.filter(
+        total=total,
+        estatus=estatus,
+        id_evento_id=id_evento.pk,
+        id_usuario_id=id_usuario.pk,
+    ).exists()
+    if existe_duplicada:
+        raise DuplicateOrderError(
+            "Ya existe una orden con los mismos datos para este usuario y evento."
+        )
+
     now = timezone.now()
     orden = Ordenes.objects.create(
         total=total,

@@ -117,17 +117,15 @@ PASSWORD_HASHERS = [
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in config(
-        'CORS_ORIGINS',
-        default='http://localhost:5173,http://localhost:5174,http://localhost:3000',
-    ).split(',')
+    for origin in config('CORS_ORIGINS', default='').split(',')
     if origin.strip()
 ]
 
-ALLOWED_HOSTS = config(
-    'ALLOWED_HOSTS',
-    default='localhost,127.0.0.1',
-).split(',')
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+    if host.strip()
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
