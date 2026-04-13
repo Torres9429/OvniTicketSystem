@@ -32,17 +32,13 @@ class CryptoTestCase(TestCase):
     
     def test_encrypt_decrypt_roundtrip(self):
         """Test que encrypt -> decrypt preserva los datos."""
-        # Cifrar
         encrypted = encrypt_payload(self.test_data)
         
-        # Verificar que es un string válido en Base64
         self.assertIsInstance(encrypted, str)
         self.assertTrue(len(encrypted) > 0)
         
-        # Descifrar
         decrypted = decrypt_payload(encrypted)
         
-        # Verificar que recuperamos los datos exactamente
         self.assertEqual(decrypted, self.test_data)
     
     def test_encrypt_produces_different_ciphertexts(self):
@@ -50,10 +46,8 @@ class CryptoTestCase(TestCase):
         encrypted1 = encrypt_payload(self.test_data)
         encrypted2 = encrypt_payload(self.test_data)
         
-        # Los ciphertexts deben ser diferentes (IV es aleatorio)
         self.assertNotEqual(encrypted1, encrypted2)
         
-        # Pero ambos descifran al mismo valor
         self.assertEqual(decrypt_payload(encrypted1), self.test_data)
         self.assertEqual(decrypt_payload(encrypted2), self.test_data)
     
@@ -61,12 +55,10 @@ class CryptoTestCase(TestCase):
         """Test que descifrar datos alterados raise IntegrityError."""
         encrypted = encrypt_payload(self.test_data)
         
-        # Modificar un byte del ciphertext (tampering)
         encrypted_list = list(encrypted)
         encrypted_list[0] = 'X' if encrypted_list[0] != 'X' else 'Y'
         tampered = ''.join(encrypted_list)
         
-        # Debe fallar la verificación de integridad
         with self.assertRaises(IntegrityError):
             decrypt_payload(tampered)
     
@@ -110,7 +102,6 @@ class CryptoTestCase(TestCase):
         """Test que plaintext no-JSON raises exception."""
         encrypted = encrypt_payload(self.test_data)
         
-        # Truncar para que el plaintext descifrado sea inválido
         truncated = encrypted[:len(encrypted)-10]
         
         with self.assertRaises(CryptoException):
@@ -123,7 +114,7 @@ class CryptoTestCase(TestCase):
             "backslash": "path\\to\\file",
             "newline": "line1\nline2",
             "tab": "col1\tcol2",
-            "unicode_escape": "\\u0041"  # Literal backslash-u
+            "unicode_escape": "\\u0041"
         }
         encrypted = encrypt_payload(special_data)
         decrypted = decrypt_payload(encrypted)
@@ -141,7 +132,6 @@ class CryptoTestCase(TestCase):
         encrypted = encrypt_payload(numeric_data)
         decrypted = decrypt_payload(encrypted)
         
-        # Comparar con tolerancia para floats
         self.assertEqual(decrypted["integer"], numeric_data["integer"])
         self.assertAlmostEqual(decrypted["float"], numeric_data["float"])
         self.assertEqual(decrypted["negative"], numeric_data["negative"])
@@ -165,15 +155,13 @@ class CryptoTestCase(TestCase):
         encrypted = encrypt_payload(self.test_data)
         raw = base64.urlsafe_b64decode(encrypted)
 
-        # Extraer partes
         iv = raw[:16]
         auth_tag = raw[-32:]
         ciphertext = raw[16:-32]
 
-        # Validaciones
-        self.assertEqual(len(iv), 16)           # IV correcto
-        self.assertEqual(len(auth_tag), 32)     # HMAC-SHA256
-        self.assertTrue(len(ciphertext) > 0)    # Hay contenido cifrado
+        self.assertEqual(len(iv), 16)
+        self.assertEqual(len(auth_tag), 32)
+        self.assertTrue(len(ciphertext) > 0)
 
     def test_is_valid_base64(self):
         import base64

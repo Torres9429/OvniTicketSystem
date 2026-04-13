@@ -26,7 +26,6 @@ class Usuarios(models.Model):
 
     @property
     def is_authenticated(self):
-        # Compatibilidad con DRF/Django permissions
         return True
 
     @property

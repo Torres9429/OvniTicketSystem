@@ -84,7 +84,6 @@ def ejecutar_compra(
         If the payment gateway declines the charge.
     """
 
-    # ── 0. Idempotency short-circuit ──────────────────────────────────────────
     if operation_id is not None:
         orden_existente = Ordenes.objects.filter(operation_id=operation_id).first()
         if orden_existente is not None:
@@ -99,7 +98,6 @@ def ejecutar_compra(
                 "transaction_id": orden_existente.operation_id or "replay",
             }
 
-    # ── 1. Re-validate: seats must still be held by this user ─────────────────
     estados = list(
         EstadoAsientoEvento.objects.select_for_update().filter(
             id_evento=id_evento,
@@ -120,7 +118,6 @@ def ejecutar_compra(
             "Por favor, inicia el proceso de compra de nuevo."
         )
 
-    # ── 2. Load event + grid cells with their zones ────────────────────────────
     evento = Eventos.objects.get(pk=id_evento)
 
     cells = list(
@@ -132,12 +129,10 @@ def ejecutar_compra(
     if len(cells) != len(ids_grid_cell):
         raise SeatUnavailableError("Algunos asientos (grid_cells) no existen.")
 
-    # Map cell_pk → zone_pk for price lookup
     cell_zone_map: dict[int, int] = {
         cell.id_grid_cells: cell.id_zona_id for cell in cells
     }
 
-    # ── 3. Calculate total from PrecioZonaEvento ──────────────────────────────
     zone_ids = list(set(cell_zone_map.values()))
 
     price_rows = PrecioZonaEvento.objects.filter(
@@ -165,11 +160,9 @@ def ejecutar_compra(
         total, len(ids_grid_cell), id_evento, usuario.pk,
     )
 
-    # ── 4. Process payment ────────────────────────────────────────────────────
     resultado = procesar_pago(monto=total, metodo_pago=metodo_pago, token=token)
 
     if not resultado["success"]:
-        # Release the held seats so they become available for others.
         liberar_asientos_usuario(id_evento=id_evento, usuario=usuario)
         logger.warning(
             "ejecutar_compra: payment failed for usuario=%s — %s",
@@ -185,7 +178,6 @@ def ejecutar_compra(
         resultado["transaction_id"], usuario.pk,
     )
 
-    # ── 5. Create order ───────────────────────────────────────────────────────
     orden: Ordenes = crear_orden(
         total=total,
         estatus=Ordenes.ESTATUS_PAGADO,
@@ -195,7 +187,6 @@ def ejecutar_compra(
         request=request,
     )
 
-    # ── 6. Create one ticket per seat ─────────────────────────────────────────
     cell_pk_to_cell = {cell.id_grid_cells: cell for cell in cells}
     tickets: list[Tickets] = []
 
@@ -203,8 +194,6 @@ def ejecutar_compra(
         cell = cell_pk_to_cell[cell_pk]
         precio = zone_price_map[cell.id_zona_id]
 
-        # id_asiento is nullable (migration 0002).
-        # id_grid_cell records which grid cell this ticket covers.
         ticket = Tickets.objects.create(
             precio=precio,
             id_orden=orden,
@@ -219,7 +208,6 @@ def ejecutar_compra(
         len(tickets), orden.pk,
     )
 
-    # ── 7. Confirm seat state → VENDIDO ───────────────────────────────────────
     confirmar_compra(
         id_evento=id_evento,
         ids_grid_cell=ids_grid_cell,
