@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
+from apps.common.crypto import CryptoException, IntegrityError, decrypt_payload, encrypt_payload
 from .models import Usuarios
 from .serializers import (
     UsuariosListSerializer, UsuariosDetailSerializer,
@@ -22,18 +23,50 @@ logger = logging.getLogger(__name__)
 ERROR_USUARIO_NO_ENCONTRADO = "Usuario no encontrado"
 
 
+def _decode_auth_payload(request):
+    ciphertext = request.data.get("ciphertext") if isinstance(request.data, dict) else None
+    if not ciphertext:
+        return request.data, None
+
+    try:
+        return decrypt_payload(ciphertext), None
+    except IntegrityError:
+        return None, Response(
+            {"error": "Integridad de payload inválida"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    except CryptoException as exc:
+        return None, Response(
+            {"error": f"No se pudo descifrar payload: {exc}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+def _build_auth_response(payload: dict, status_code: int):
+    try:
+        ciphertext = encrypt_payload(payload)
+        return Response({"ciphertext": ciphertext}, status=status_code)
+    except CryptoException:
+        # Fallback a respuesta plana para no romper autenticación si falla cifrado de salida.
+        return Response(payload, status=status_code)
+
+
 class RegistroUsuarioView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = UsuariosCreateSerializer(data=request.data) 
+        payload, error_response = _decode_auth_payload(request)
+        if error_response is not None:
+            return error_response
+
+        serializer = UsuariosCreateSerializer(data=payload)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
             rol = Roles.objects.get(nombre='usuario')
             usuario = crear_usuario(**serializer.validated_data, id_rol=rol, estatus='activo', request=request)
-            return Response(UsuariosDetailSerializer(usuario).data, status=status.HTTP_201_CREATED)
+            return _build_auth_response(UsuariosDetailSerializer(usuario).data, status.HTTP_201_CREATED)
         except Roles.DoesNotExist:
             return Response({"error": "Rol 'usuario' no encontrado"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
@@ -46,7 +79,11 @@ class RegistroOrganizadorView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = UsuariosCreateSerializer(data=request.data)
+        payload, error_response = _decode_auth_payload(request)
+        if error_response is not None:
+            return error_response
+
+        serializer = UsuariosCreateSerializer(data=payload)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -57,9 +94,9 @@ class RegistroOrganizadorView(APIView):
                 estatus='pendiente',
                 request=request
             )
-            return Response(
+            return _build_auth_response(
                 {"message": "Solicitud enviada, espera la aprobación del administrador."},
-                status=status.HTTP_201_CREATED
+                status.HTTP_201_CREATED,
             )
         except Roles.DoesNotExist:
             return Response({"error": "Rol 'cliente' no encontrado"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -249,7 +286,11 @@ class LoginView(APIView):
 
     def post(self, request):
         logger.debug("POST /auth/login/ — intento de login")
-        serializer = LoginSerializer(data=request.data)
+        payload, error_response = _decode_auth_payload(request)
+        if error_response is not None:
+            return error_response
+
+        serializer = LoginSerializer(data=payload)
 
         if not serializer.is_valid():
             logger.warning(f"POST /auth/login/ — validación fallida: {serializer.errors}")
@@ -281,7 +322,7 @@ class LoginView(APIView):
         refresh["rol"] = usuario.id_rol.nombre
 
         logger.info(f"POST /auth/login/ — login exitoso para usuario id={usuario.id_usuario}")
-        return Response(
+        return _build_auth_response(
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
@@ -292,7 +333,7 @@ class LoginView(APIView):
                     "rol": usuario.id_rol.nombre,
                 },
             },
-            status=status.HTTP_200_OK,
+            status.HTTP_200_OK,
         )
 
 
