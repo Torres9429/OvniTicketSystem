@@ -18,7 +18,7 @@ from .serializers import (
     OrdenesListSerializer,
     OrdenesUpdateSerializer,
 )
-from .services import actualizar_orden, crear_orden, eliminar_orden
+from .services import DuplicateOrderError, actualizar_orden, crear_orden, eliminar_orden
 
 logger = logging.getLogger(__name__)
 ERROR_ORDEN_NO_ENCONTRADA = "Orden no encontrada"
@@ -230,8 +230,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         logger.debug(f"POST /ordenes/ — payload: {request.data}")
-        serializer_class = self.get_serializer_class()
-        serializer = serializer_class(data=request.data)
+        serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
             logger.warning(f"POST /ordenes/ — validación fallida: {serializer.errors}")
@@ -242,6 +241,12 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             output = OrdenesDetailSerializer(orden)
             logger.info(f"POST /ordenes/ — orden creada con id={orden.pk}")
             return Response(output.data, status=status.HTTP_201_CREATED)
+        except DuplicateOrderError as e:
+            logger.warning(f"POST /ordenes/ — intento de duplicidad: {e}")
+            return Response(
+                {"error": str(e), "codigo": "ORDEN_DUPLICADA"},
+                status=status.HTTP_409_CONFLICT,
+            )
         except Exception as e:
             logger.error(f"POST /ordenes/ — error al crear orden: {e}", exc_info=True)
             return Response(
