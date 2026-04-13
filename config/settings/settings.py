@@ -1,5 +1,7 @@
 from pathlib import Path
+from datetime import timedelta
 from decouple import config
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,9 +14,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', cast=bool)
 
-ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -107,6 +108,24 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptPasswordHasher',
+]
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in config('CORS_ORIGINS', default='').split(',')
+    if origin.strip()
+]
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+    if host.strip()
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
@@ -129,5 +148,161 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
-    ]
+    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.common.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
 }
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_CLAIM": "user_id",
+}
+LOGS_DIR = BASE_DIR / "logs"
+os.makedirs(LOGS_DIR, exist_ok=True)
+ROTATING_FILE_HANDLER_CLASS = "logging.handlers.RotatingFileHandler"
+CALLBACK_FILTER_CLASS = "django.utils.log.CallbackFilter"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} | {levelname: <8} | {name}:{funcName}:{lineno} - {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+            "level": "DEBUG",
+        },
+        "file_critical": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "critical.log"),
+            "formatter": "verbose",
+            "level": "CRITICAL",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 10,
+            "encoding": "utf-8",
+            "filters": ["only_critical"],
+        },
+        "file_error": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "error.log"),
+            "formatter": "verbose",
+            "level": "ERROR",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "filters": ["only_error"],
+        },
+        "file_warning": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "warning.log"),
+            "formatter": "verbose",
+            "level": "WARNING",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "filters": ["only_warning"],
+        },
+        "file_info": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "info.log"),
+            "formatter": "verbose",
+            "level": "INFO",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "filters": ["only_info"],
+        },
+        "file_debug": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "debug.log"),
+            "formatter": "verbose",
+            "level": "DEBUG",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "filters": ["only_debug"],
+        },
+    },
+    "filters": {
+        "only_critical": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 50,
+        },
+        "only_error": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 40,
+        },
+        "only_warning": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 30,
+        },
+        "only_info": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 20,
+        },
+        "only_debug": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 10,
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "apps.eventos": {
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "apps.lugares": {
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "apps.layouts": {
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
+        "level": "DEBUG",
+    },
+}
+
+AES_SECRET_KEY = config(
+    'AES_SECRET_KEY',
+    default=None,
+    cast=str
+)
+
+HMAC_SECRET_KEY = config(
+    'HMAC_SECRET_KEY',
+    default=None,
+    cast=str
+)
+
+# Validación en desarrollo
+if DEBUG and (AES_SECRET_KEY is None or HMAC_SECRET_KEY is None):
+    import warnings
+    warnings.warn(
+        "AES_SECRET_KEY y/o HMAC_SECRET_KEY no están configuradas. "
+        "Ejecutar: python generate_keys.py",
+        RuntimeWarning
+    )
