@@ -106,16 +106,13 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     Busca el usuario en el modelo Usuarios en lugar de usar Django User.
     """
     def validate(self, attrs):
-        # Validar el refresh token
         refresh = self.token_class(attrs['refresh'])
         
         try:
-            # Extraer user_id del token
             user_id = refresh.get('user_id')
             if not user_id:
                 raise InvalidToken('Token does not contain user_id')
             
-            # Buscar el usuario en Usuarios (no en django.contrib.auth.User)
             Usuarios.objects.get(id_usuario=user_id)
             
         except Usuarios.DoesNotExist:
@@ -123,7 +120,6 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
         except KeyError:
             raise InvalidToken('Token does not contain user_id')
         
-        # Generar nuevo access token
         data = {'access': str(refresh.access_token)}
         
         return data

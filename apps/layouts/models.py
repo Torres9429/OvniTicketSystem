@@ -21,8 +21,7 @@ class Layouts(models.Model):
     fecha_creacion = models.DateTimeField(default=timezone.now)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
-    # Ayuda a detectar cambios sin comparar JSON completo
-    checksum_layout = models.CharField(max_length=64, null=True, blank=True)
+    checksum_layout = models.CharField(max_length=64, blank=True)
     fecha_publicacion = models.DateTimeField(null=True, blank=True)
 
     id_dueno = models.ForeignKey(

@@ -9,8 +9,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Tokens that trigger specific mock outcomes.
-# Any other token (or no token) is treated as a successful payment.
 _FAILURE_TOKEN = "fail"
 _CANCEL_TOKEN = "cancel"
 

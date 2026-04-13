@@ -47,7 +47,6 @@ def _build_auth_response(payload: dict, status_code: int):
         ciphertext = encrypt_payload(payload)
         return Response({"ciphertext": ciphertext}, status=status_code)
     except CryptoException:
-        # Fallback a respuesta plana para no romper autenticación si falla cifrado de salida.
         return Response(payload, status=status_code)
 
 

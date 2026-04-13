@@ -32,25 +32,19 @@ class AESRenderer(BaseRenderer):
         try:
             aes_key, hmac_key = _get_keys()
             
-            # Serializar respuesta
             plaintext = json.dumps(data, ensure_ascii=False).encode("utf-8")
             
-            # Generar nonce aleatorio
             nonce = token_bytes(16)
             
-            # Cifrar con GCM (sin padding)
             cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
             ciphertext, tag = cipher.encrypt_and_digest(plaintext)
             
-            # Calcular HMAC
             hmac_obj = hmac.new(hmac_key, nonce + ciphertext + tag, hashlib.sha256)
             auth_tag = hmac_obj.digest()
             
-            # Empaquetar: nonce + ciphertext + tag + auth_tag
             payload = nonce + ciphertext + tag + auth_tag
             ciphertext_b64 = base64.urlsafe_b64encode(payload).decode('utf-8')
             
-            # Retornar respuesta cifrada
             response = {
                 "ciphertext": ciphertext_b64,
                 "status": renderer_context.get('response').status_code if renderer_context else 200
@@ -60,7 +54,6 @@ class AESRenderer(BaseRenderer):
             
         except CryptoException as e:
             logger.error(f"Error de cifrado en AESRenderer: {str(e)}")
-            # En caso de error, retornar error sin cifrar (o cifrado si es posible)
             error_response = {"error": "Error en servidor", "detail": str(e)}
             return json.dumps(error_response)
         except Exception as e:

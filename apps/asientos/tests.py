@@ -1,14 +1,3 @@
-"""
-Seat hold / confirm / release test suite.
-
-Run with:
-    python manage.py test apps.asientos --settings=config.settings
-
-All tests use Django's TestCase (SQLite, wrapped in transactions that are
-rolled back after every test) and the APIClient from DRF so that
-authentication middleware is exercised correctly.
-"""
-
 import threading
 from datetime import timedelta
 from unittest import skipIf
@@ -35,12 +24,8 @@ from apps.asientos.services import (
     SeatUnavailableError,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _make_usuario(rol, suffix=""):
-    """Create a minimal Usuarios row."""
     now = timezone.now()
     return Usuarios.objects.create(
         nombre=f"Test{suffix}",
@@ -56,7 +41,6 @@ def _make_usuario(rol, suffix=""):
 
 
 def _make_evento(lugar, layout, tiempo_espera=10):
-    """Create a minimal Eventos row."""
     now = timezone.now()
     return Eventos.objects.create(
         nombre="Test Event",
@@ -72,31 +56,17 @@ def _make_evento(lugar, layout, tiempo_espera=10):
     )
 
 
-# ---------------------------------------------------------------------------
-# Base setUp shared by every test class
-# ---------------------------------------------------------------------------
 
 class BaseAsientosTestCase(TestCase):
-    """
-    Creates the full fixture graph once per class:
-
-        Roles → Usuarios (user_a, user_b)
-              → Lugares → Layouts → Zonas → GridCells (2 seat cells)
-              → Eventos
-              → EstadoAsientoEvento rows for each GridCell
-    """
 
     @classmethod
     def setUpTestData(cls):
-        # Roles
         cls.rol_cliente = Roles.objects.create(nombre="cliente")
         cls.rol_admin = Roles.objects.create(nombre="admin")
 
-        # Users
         cls.user_a = _make_usuario(cls.rol_cliente, suffix="_a")
         cls.user_b = _make_usuario(cls.rol_cliente, suffix="_b")
 
-        # Venue
         now = timezone.now()
         cls.lugar = Lugares.objects.create(
             nombre="Venue Test",
@@ -109,7 +79,6 @@ class BaseAsientosTestCase(TestCase):
             id_dueno=cls.user_a,
         )
 
-        # Layout
         cls.layout = Layouts.objects.create(
             grid_rows=5,
             grid_cols=5,
@@ -121,7 +90,6 @@ class BaseAsientosTestCase(TestCase):
             id_lugar=cls.lugar,
         )
 
-        # Zone
         cls.zona = Zonas.objects.create(
             nombre="General",
             color="#FF0000",
@@ -130,7 +98,6 @@ class BaseAsientosTestCase(TestCase):
             id_layout=cls.layout,
         )
 
-        # Two seat-type grid cells
         cls.cell_1 = GridCells.objects.create(
             tipo="ZONA DE ASIENTOS",
             row=0,
@@ -146,14 +113,9 @@ class BaseAsientosTestCase(TestCase):
             id_layout=cls.layout,
         )
 
-        # Event
         cls.evento = _make_evento(cls.lugar, cls.layout, tiempo_espera=10)
 
     def setUp(self):
-        """
-        Reset EstadoAsientoEvento rows to DISPONIBLE before every individual
-        test so tests don't bleed state into each other.
-        """
         EstadoAsientoEvento.objects.filter(id_evento=self.evento).delete()
         EstadoAsientoEvento.objects.create(
             id_grid_cell=self.cell_1,
@@ -166,15 +128,10 @@ class BaseAsientosTestCase(TestCase):
             estado=EstadoAsientoEvento.DISPONIBLE,
         )
 
-    # Convenience: PKs list
     @property
     def both_cell_ids(self):
         return [self.cell_1.pk, self.cell_2.pk]
 
-
-# ===========================================================================
-# 1. Service-layer unit tests
-# ===========================================================================
 
 class TestRetenerAsientosSuccess(BaseAsientosTestCase):
     """Happy path: hold two available seats."""
@@ -186,24 +143,20 @@ class TestRetenerAsientosSuccess(BaseAsientosTestCase):
             usuario=self.user_a,
         )
 
-        # Service returns a dict with retenido_hasta (ISO string) and ids_grid_cell list
         self.assertIsInstance(estados, dict)
         self.assertIn("retenido_hasta", estados)
         self.assertIn("ids_grid_cell", estados)
         self.assertEqual(len(estados["ids_grid_cell"]), 2)
         self.assertIsNotNone(estados["retenido_hasta"])
-        # The iso string is parseable and in the future
         from datetime import datetime
         parsed = datetime.fromisoformat(estados["retenido_hasta"])
         self.assertGreater(parsed, timezone.now() - timedelta(seconds=5))
 
-        # DB state must reflect RETENIDO
         db_estados = EstadoAsientoEvento.objects.filter(id_evento=self.evento)
         for e in db_estados:
             self.assertEqual(e.estado, EstadoAsientoEvento.RETENIDO)
             self.assertEqual(e.retenido_por_id, self.user_a.pk)
             self.assertIsNotNone(e.retenido_hasta)
-            # Hold window is evento.tiempo_espera minutes from now (within 5s tolerance)
             expected_expiry = timezone.now() + timedelta(minutes=self.evento.tiempo_espera)
             delta = abs((e.retenido_hasta - expected_expiry).total_seconds())
             self.assertLess(delta, 5, "Hold expiry should be ~tiempo_espera minutes from now")
@@ -213,14 +166,12 @@ class TestRetenerAsientosAlreadyHeld(BaseAsientosTestCase):
     """user_b cannot hold seats already held by user_a."""
 
     def test_retener_asientos_already_held(self):
-        # user_a holds first
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
             usuario=self.user_a,
         )
 
-        # user_b attempts the same seats — must raise
         with self.assertRaises(SeatUnavailableError):
             retener_asientos(
                 id_evento=self.evento.pk,
@@ -228,13 +179,11 @@ class TestRetenerAsientosAlreadyHeld(BaseAsientosTestCase):
                 usuario=self.user_b,
             )
 
-        # Seats must still belong to user_a
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.retenido_por_id, self.user_a.pk)
 
 
 class TestConfirmarCompraSuccess(BaseAsientosTestCase):
-    """Held seats transition to VENDIDO on confirm."""
 
     def test_confirmar_compra_success(self):
         retener_asientos(
@@ -254,23 +203,15 @@ class TestConfirmarCompraSuccess(BaseAsientosTestCase):
 
 
 class TestConfirmarCompraExpired(BaseAsientosTestCase):
-    """Confirming after the hold window has passed must raise SeatUnavailableError."""
 
     def test_confirmar_compra_expired(self):
-        # Hold with zero-second expiry (already expired)
         ahora = timezone.now()
         EstadoAsientoEvento.objects.filter(id_evento=self.evento).update(
             estado=EstadoAsientoEvento.RETENIDO,
             retenido_por=self.user_a,
-            retenido_hasta=ahora - timedelta(seconds=1),  # expired 1 second ago
+            retenido_hasta=ahora - timedelta(seconds=1),
         )
 
-        # confirmar_compra filters on estado=RETENIDO AND retenido_por=usuario.
-        # The expiry itself is enforced by _liberar_expirados, which fires
-        # during retener_asientos / obtener_disponibilidad_evento — not inside
-        # confirmar_compra. To simulate the production scenario where a
-        # background cleanup (or a subsequent retener call) released the seats
-        # before confirmation, we manually release them here.
         EstadoAsientoEvento.objects.filter(
             id_evento=self.evento,
             retenido_hasta__lt=timezone.now(),
@@ -289,7 +230,6 @@ class TestConfirmarCompraExpired(BaseAsientosTestCase):
 
 
 class TestConfirmarCompraWrongUser(BaseAsientosTestCase):
-    """user_b cannot confirm seats held by user_a."""
 
     def test_confirmar_compra_wrong_user(self):
         retener_asientos(
@@ -302,23 +242,16 @@ class TestConfirmarCompraWrongUser(BaseAsientosTestCase):
             confirmar_compra(
                 id_evento=self.evento.pk,
                 ids_grid_cell=self.both_cell_ids,
-                usuario=self.user_b,  # wrong user
+                usuario=self.user_b,
             )
 
-        # Seats must still be RETENIDO by user_a
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.RETENIDO)
             self.assertEqual(e.retenido_por_id, self.user_a.pk)
 
 
 class TestLiberarExpirados(BaseAsientosTestCase):
-    """
-    Expired holds are released lazily when obtener_disponibilidad_evento
-    is called (which in turn calls _liberar_expirados).
-    """
-
     def test_liberar_expirados(self):
-        # Manually plant an expired hold
         past = timezone.now() - timedelta(hours=1)
         EstadoAsientoEvento.objects.filter(id_evento=self.evento).update(
             estado=EstadoAsientoEvento.RETENIDO,
@@ -326,14 +259,11 @@ class TestLiberarExpirados(BaseAsientosTestCase):
             retenido_hasta=past,
         )
 
-        # Trigger lazy release via the availability query
         disponibilidad = list(obtener_disponibilidad_evento(self.evento.pk))
 
-        # All seats should now be DISPONIBLE
         for row in disponibilidad:
             self.assertEqual(row["estado"], EstadoAsientoEvento.DISPONIBLE)
 
-        # DB check
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.DISPONIBLE)
             self.assertIsNone(e.retenido_por_id)
@@ -341,7 +271,6 @@ class TestLiberarExpirados(BaseAsientosTestCase):
 
 
 class TestDuplicateConfirmation(BaseAsientosTestCase):
-    """Confirming the same seats a second time must raise SeatUnavailableError."""
 
     def test_duplicate_confirmation(self):
         retener_asientos(
@@ -350,14 +279,12 @@ class TestDuplicateConfirmation(BaseAsientosTestCase):
             usuario=self.user_a,
         )
 
-        # First confirmation — succeeds
         confirmar_compra(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
             usuario=self.user_a,
         )
 
-        # Second confirmation — must fail because state is now VENDIDO, not RETENIDO
         with self.assertRaises(SeatUnavailableError):
             confirmar_compra(
                 id_evento=self.evento.pk,
@@ -365,23 +292,10 @@ class TestDuplicateConfirmation(BaseAsientosTestCase):
                 usuario=self.user_a,
             )
 
-        # Seats must still be VENDIDO (the second call should not corrupt state)
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.VENDIDO)
 
-
-# ===========================================================================
-# 2. API endpoint tests (authentication + HTTP layer)
-# ===========================================================================
-
 class TestRetenerAsientosAPI(BaseAsientosTestCase):
-    """
-    POST /api/asientos/retener/ — tests exercised through the HTTP layer.
-
-    Because the project uses a custom JWT authentication class (not Django's
-    session auth), we call force_authenticate on the APIClient so we bypass
-    JWT token generation while still exercising the permission classes.
-    """
 
     def setUp(self):
         super().setUp()
@@ -404,7 +318,6 @@ class TestRetenerAsientosAPI(BaseAsientosTestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 200)
-        # Response must include retenido_hasta (ISO string) and ids_grid_cell list
         self.assertIn("retenido_hasta", response.data)
         self.assertIn("ids_grid_cell", response.data)
         self.assertIsNotNone(response.data["retenido_hasta"])
@@ -413,14 +326,12 @@ class TestRetenerAsientosAPI(BaseAsientosTestCase):
 
     def test_retener_api_conflict_returns_409(self):
         """Trying to hold seats already held returns 409 Conflict."""
-        # user_a holds first
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
             usuario=self.user_a,
         )
 
-        # user_b attempts via API
         self.client.force_authenticate(user=self.user_b)
         response = self.client.post(
             "/api/asientos/retener/",
@@ -433,7 +344,7 @@ class TestRetenerAsientosAPI(BaseAsientosTestCase):
         self.client.force_authenticate(user=self.user_a)
         response = self.client.post(
             "/api/asientos/retener/",
-            data={},  # no id_evento, no ids_grid_cell
+            data={}, 
             format="json",
         )
         self.assertEqual(response.status_code, 400)
@@ -455,7 +366,6 @@ class TestConfirmarCompraAPI(BaseAsientosTestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_confirmar_api_success_returns_200(self):
-        # Hold first
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
@@ -511,7 +421,6 @@ class TestLiberarAsientosAPI(BaseAsientosTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-        # Both seats should be DISPONIBLE again
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.DISPONIBLE)
 
@@ -530,7 +439,6 @@ class TestDisponibilidadAPI(BaseAsientosTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_disponibilidad_shows_correct_states(self):
-        # Hold cell_1 only
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=[self.cell_1.pk],
@@ -541,7 +449,6 @@ class TestDisponibilidadAPI(BaseAsientosTestCase):
             f"/api/asientos/disponibilidad/{self.evento.pk}/",
         )
         self.assertEqual(response.status_code, 200)
-        # Django FK .values("id_grid_cell") returns key "id_grid_cell_id" (the attname)
         cell_key = "id_grid_cell_id" if "id_grid_cell_id" in response.data[0] else "id_grid_cell"
         estados_map = {row[cell_key]: row["estado"] for row in response.data}
         self.assertEqual(estados_map[self.cell_1.pk], EstadoAsientoEvento.RETENIDO)
@@ -551,10 +458,6 @@ class TestDisponibilidadAPI(BaseAsientosTestCase):
         response = self.client.get("/api/asientos/disponibilidad/999999/")
         self.assertEqual(response.status_code, 404)
 
-
-# ===========================================================================
-# 3. Concurrency smoke test (best-effort under SQLite)
-# ===========================================================================
 
 class TestConcurrentHoldAttempts(TransactionTestCase):
     """
@@ -645,11 +548,9 @@ class TestConcurrentHoldAttempts(TransactionTestCase):
         t1.join(timeout=10)
         t2.join(timeout=10)
 
-        # Exactly one success, one failure
         self.assertEqual(len(results), 1, f"Expected 1 success, got results={results} errors={errors}")
         self.assertEqual(len(errors), 1)
 
-        # Verify DB — one user owns both seats
         held_by = set(
             EstadoAsientoEvento.objects.filter(
                 id_evento=self.evento,
@@ -660,34 +561,26 @@ class TestConcurrentHoldAttempts(TransactionTestCase):
         self.assertIn(list(held_by)[0], [self.user_a.pk, self.user_b.pk])
 
 
-# ===========================================================================
-# 4. New behavior tests — same-user extension/reduction
-# ===========================================================================
-
 class TestRetenerAsientosExtendByOwner(BaseAsientosTestCase):
     """user_a holds cell_1, then extends to hold cell_1 + cell_2. Must succeed."""
 
     def test_extend_hold_adds_cells(self):
-        # First hold: only cell_1
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=[self.cell_1.pk],
             usuario=self.user_a,
         )
 
-        # Second hold: extend to both cells — should not raise
         result = retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
             usuario=self.user_a,
         )
 
-        # Return dict must reflect 2 cells
         self.assertIsInstance(result, dict)
         self.assertEqual(len(result["ids_grid_cell"]), 2)
         self.assertIsNotNone(result["retenido_hasta"])
 
-        # DB: both cells must be RETENIDO by user_a with a non-null expiry
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.RETENIDO)
             self.assertEqual(e.retenido_por_id, self.user_a.pk)
@@ -698,32 +591,27 @@ class TestRetenerAsientosReduceByOwner(BaseAsientosTestCase):
     """user_a holds both cells, then reduces to cell_1 only. cell_2 must be released."""
 
     def test_reduce_hold_releases_deselected_cell(self):
-        # Hold both cells first
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
             usuario=self.user_a,
         )
 
-        # Reduce to cell_1 only
         result = retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=[self.cell_1.pk],
             usuario=self.user_a,
         )
 
-        # Return dict must reflect only 1 cell
         self.assertIsInstance(result, dict)
         self.assertEqual(result["ids_grid_cell"], [self.cell_1.pk])
 
-        # cell_1: still RETENIDO by user_a
         estado_1 = EstadoAsientoEvento.objects.get(
             id_evento=self.evento, id_grid_cell=self.cell_1
         )
         self.assertEqual(estado_1.estado, EstadoAsientoEvento.RETENIDO)
         self.assertEqual(estado_1.retenido_por_id, self.user_a.pk)
 
-        # cell_2: released — DISPONIBLE, no owner, no expiry
         estado_2 = EstadoAsientoEvento.objects.get(
             id_evento=self.evento, id_grid_cell=self.cell_2
         )
@@ -736,14 +624,12 @@ class TestRetenerAsientosOtherUserStillBlocks(BaseAsientosTestCase):
     """user_a holds cell_1. user_b tries cell_1 + cell_2. Must raise; neither cell changes owner."""
 
     def test_other_user_hold_raises_and_does_not_partially_commit(self):
-        # user_a holds cell_1
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=[self.cell_1.pk],
             usuario=self.user_a,
         )
 
-        # user_b attempts to hold both — must fail
         with self.assertRaises(SeatUnavailableError):
             retener_asientos(
                 id_evento=self.evento.pk,
@@ -751,24 +637,18 @@ class TestRetenerAsientosOtherUserStillBlocks(BaseAsientosTestCase):
                 usuario=self.user_b,
             )
 
-        # cell_1 still held by user_a
         estado_1 = EstadoAsientoEvento.objects.get(
             id_evento=self.evento, id_grid_cell=self.cell_1
         )
         self.assertEqual(estado_1.estado, EstadoAsientoEvento.RETENIDO)
         self.assertEqual(estado_1.retenido_por_id, self.user_a.pk)
 
-        # cell_2 must still be DISPONIBLE (user_b's failed attempt must not have committed)
         estado_2 = EstadoAsientoEvento.objects.get(
             id_evento=self.evento, id_grid_cell=self.cell_2
         )
         self.assertEqual(estado_2.estado, EstadoAsientoEvento.DISPONIBLE)
         self.assertIsNone(estado_2.retenido_por_id)
 
-
-# ===========================================================================
-# 5. HoldStatusView endpoint tests
-# ===========================================================================
 
 class TestHoldStatusAPI(BaseAsientosTestCase):
     """GET /api/asientos/hold-status/<id_evento>/ — authentication + response shape."""
@@ -804,17 +684,14 @@ class TestHoldStatusAPI(BaseAsientosTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["tiene_retencion"])
         self.assertIsNotNone(response.data["retenido_hasta"])
-        # Both cells must appear (order may vary)
         returned_cells = set(response.data["ids_grid_cell"])
         self.assertEqual(returned_cells, set(self.both_cell_ids))
-        # retenido_hasta must be a parseable ISO datetime in the future
         from datetime import datetime
         parsed = datetime.fromisoformat(response.data["retenido_hasta"])
         self.assertGreater(parsed, timezone.now() - timedelta(seconds=5))
 
     def test_expired_hold_auto_released_returns_empty(self):
         """Hold with a past expiry is auto-released by _liberar_expirados on GET."""
-        # Plant an expired hold manually
         past = timezone.now() - timedelta(hours=1)
         EstadoAsientoEvento.objects.filter(id_evento=self.evento).update(
             estado=EstadoAsientoEvento.RETENIDO,
@@ -825,15 +702,10 @@ class TestHoldStatusAPI(BaseAsientosTestCase):
         self.client.force_authenticate(user=self.user_a)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        # _liberar_expirados should have run; no active hold remains
         self.assertFalse(response.data["tiene_retencion"])
         self.assertIsNone(response.data["retenido_hasta"])
         self.assertEqual(response.data["ids_grid_cell"], [])
 
-
-# ===========================================================================
-# 6. RetenerAsientosView response-shape test
-# ===========================================================================
 
 class TestRetenerAsientosAPIResponseShape(BaseAsientosTestCase):
     """POST /api/asientos/retener/ must return retenido_hasta and ids_grid_cell."""
@@ -851,14 +723,12 @@ class TestRetenerAsientosAPIResponseShape(BaseAsientosTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-        # New shape: retenido_hasta and ids_grid_cell must be present
         self.assertIn("retenido_hasta", response.data)
         self.assertIn("ids_grid_cell", response.data)
         self.assertIsNotNone(response.data["retenido_hasta"])
         self.assertIsInstance(response.data["ids_grid_cell"], list)
         self.assertEqual(len(response.data["ids_grid_cell"]), 2)
 
-        # retenido_hasta must be a parseable ISO datetime string
         from datetime import datetime
         parsed = datetime.fromisoformat(response.data["retenido_hasta"])
         self.assertGreater(parsed, timezone.now() - timedelta(seconds=5))

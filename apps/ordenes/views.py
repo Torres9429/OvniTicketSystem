@@ -24,10 +24,6 @@ logger = logging.getLogger(__name__)
 ERROR_ORDEN_NO_ENCONTRADA = "Orden no encontrada"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Purchase endpoint
-# ─────────────────────────────────────────────────────────────────────────────
-
 class ComprarView(APIView):
     """
     POST /api/ordenes/comprar/
@@ -76,7 +72,6 @@ class ComprarView(APIView):
         token = data.get("token", None)
         operation_id = data.get("operation_id", None)
 
-        # Validate operation_id if provided
         if operation_id is not None:
             if not isinstance(operation_id, str) or len(operation_id) > 64:
                 return Response(
@@ -84,7 +79,6 @@ class ComprarView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Basic input validation
         if not id_evento or not ids_grid_cell:
             return Response(
                 {"error": "Se requieren 'id_evento' e 'ids_grid_cell'."},
@@ -183,9 +177,6 @@ class ComprarView(APIView):
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Standard CRUD viewset
-# ─────────────────────────────────────────────────────────────────────────────
 
 class OrdenesViewSet(viewsets.ModelViewSet):
     queryset = Ordenes.objects.all()
@@ -330,6 +321,172 @@ class OrdenesViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    def _es_admin(self, user):
+        rol = getattr(user, "id_rol", None)
+        rol_nombre = str(getattr(rol, "nombre", "")).lower()
+        return bool(getattr(user, "id_rol_id", None) and rol_nombre == "admin")
+
+    def _obtener_contexto_ventas(self, usuario):
+        from django.db.models import Sum, Count
+        from apps.eventos.models import Eventos
+        from apps.tickets.models import Tickets
+
+        eventos_qs = Eventos.objects.filter(
+            id_lugar__id_dueno=usuario
+        ).order_by('-fecha_inicio')
+        evento_ids = list(eventos_qs.values_list('id_evento', flat=True))
+
+        ordenes_pagadas = Ordenes.objects.filter(
+            id_evento__in=evento_ids,
+            estatus=Ordenes.ESTATUS_PAGADO,
+        )
+        ordenes_pendientes_count = Ordenes.objects.filter(
+            id_evento__in=evento_ids,
+            estatus=Ordenes.ESTATUS_PENDIENTE,
+        ).count()
+
+        agregados = ordenes_pagadas.aggregate(
+            total_vendido=Sum('total'),
+            ordenes_count=Count('id_orden'),
+        )
+
+        total_vendido = float(agregados['total_vendido'] or 0)
+        ordenes_pagadas_count = int(agregados['ordenes_count'] or 0)
+        boletos_vendidos = Tickets.objects.filter(id_orden__in=ordenes_pagadas).count()
+
+        return (
+            eventos_qs,
+            ordenes_pagadas,
+            total_vendido,
+            ordenes_pagadas_count,
+            ordenes_pendientes_count,
+            boletos_vendidos,
+        )
+
+    def _construir_eventos_payload(self, eventos_qs, ordenes_pagadas):
+        from django.db.models import Sum
+        from apps.tickets.models import Tickets
+        from apps.grid_cells.models import GridCells
+
+        eventos_payload = []
+        for ev in eventos_qs:
+            ev_ordenes_pagadas = ordenes_pagadas.filter(id_evento=ev)
+            ev_revenue = float(
+                ev_ordenes_pagadas.aggregate(total=Sum('total'))['total'] or 0
+            )
+            ev_tickets = Tickets.objects.filter(
+                id_orden__in=ev_ordenes_pagadas
+            ).count()
+
+            capacidad = GridCells.objects.filter(
+                id_layout=ev.id_version_id, tipo='ZONA DE ASIENTOS'
+            ).count()
+            ocupacion = round((ev_tickets / capacidad) * 100, 1) if capacidad else 0.0
+
+            eventos_payload.append({
+                "id_evento": ev.pk,
+                "nombre": ev.nombre,
+                "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
+                "estatus": ev.estatus,
+                "boletos_vendidos": ev_tickets,
+                "asientos_totales": capacidad,
+                "ocupacion_pct": ocupacion,
+                "revenue": ev_revenue,
+            })
+
+        return eventos_payload
+
+    def _obtener_comprador(self, orden):
+        if not orden.id_usuario_id:
+            return None
+        try:
+            return orden.id_usuario.correo
+        except Exception:
+            return None
+
+    def _construir_ordenes_recientes_payload(self, eventos_qs, ordenes_pagadas):
+        eventos_nombre_map = {e.pk: e.nombre for e in eventos_qs}
+        recientes = list(ordenes_pagadas.order_by('-fecha_creacion')[:10])
+        payload = []
+
+        for o in recientes:
+            payload.append({
+                "id_orden": o.pk,
+                "fecha_creacion": o.fecha_creacion.isoformat() if o.fecha_creacion else None,
+                "id_evento": o.id_evento_id,
+                "nombre_evento": eventos_nombre_map.get(
+                    o.id_evento_id, f"Evento #{o.id_evento_id}"
+                ),
+                "total": float(o.total or 0),
+                "estatus": o.estatus,
+                "comprador": self._obtener_comprador(o),
+            })
+
+        return payload
+
+    def _obtener_grid_cells_y_zonas(self, tickets):
+        from apps.zonas.models import Zonas
+        from apps.grid_cells.models import GridCells
+
+        grid_cell_ids = [t.id_grid_cell_id for t in tickets if t.id_grid_cell_id]
+        grid_cells_by_id = {}
+        zonas_by_id = {}
+
+        if not grid_cell_ids:
+            return grid_cells_by_id, zonas_by_id
+
+        for gc in GridCells.objects.filter(id_grid_cells__in=grid_cell_ids):
+            grid_cells_by_id[gc.id_grid_cells] = gc
+
+        zona_ids = {gc.id_zona_id for gc in grid_cells_by_id.values() if gc.id_zona_id}
+        if zona_ids:
+            for z in Zonas.objects.filter(pk__in=zona_ids):
+                zonas_by_id[z.pk] = z
+
+        return grid_cells_by_id, zonas_by_id
+
+    def _construir_tickets_payload(self, tickets):
+        grid_cells_by_id, zonas_by_id = self._obtener_grid_cells_y_zonas(tickets)
+        payload = []
+
+        for t in tickets:
+            gc = grid_cells_by_id.get(t.id_grid_cell_id)
+            zona = zonas_by_id.get(gc.id_zona_id) if gc else None
+
+            label = None
+            if gc is not None and gc.row is not None and gc.col is not None:
+                label = f"F{gc.row + 1}-C{gc.col + 1}"
+
+            payload.append(
+                {
+                    "id_ticket": t.pk,
+                    "precio": float(t.precio) if t.precio is not None else 0.0,
+                    "id_grid_cell": t.id_grid_cell_id,
+                    "id_evento": t.id_evento_id,
+                    "label": label,
+                    "zona": zona.nombre if zona else None,
+                }
+            )
+
+        return payload
+
+    def _obtener_evento_payload(self, id_evento):
+        from apps.eventos.models import Eventos
+
+        try:
+            ev = Eventos.objects.get(pk=id_evento)
+        except Eventos.DoesNotExist:
+            return None
+
+        return {
+            "id_evento": ev.pk,
+            "nombre": ev.nombre,
+            "descripcion": ev.descripcion,
+            "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
+            "fecha_fin": ev.fecha_fin.isoformat() if ev.fecha_fin else None,
+            "estatus": ev.estatus,
+        }
+
     @action(detail=False, methods=["get"], url_path="mis-ventas")
     def mis_ventas(self, request):
         """GET /api/ordenes/mis-ventas/
@@ -360,91 +517,21 @@ class OrdenesViewSet(viewsets.ModelViewSet):
           ]
         }
         """
-        from django.db.models import Sum, Count
-        from apps.eventos.models import Eventos
-        from apps.tickets.models import Tickets
-        from apps.grid_cells.models import GridCells
+        (
+            eventos_qs,
+            ordenes_pagadas,
+            total_vendido,
+            ordenes_pagadas_count,
+            ordenes_pendientes_count,
+            boletos_vendidos,
+        ) = self._obtener_contexto_ventas(request.user)
 
-        usuario = request.user
-
-        # Eventos cuyos lugares son del usuario
-        eventos_qs = Eventos.objects.filter(
-            id_lugar__id_dueno=usuario
-        ).order_by('-fecha_inicio')
-
-        evento_ids = list(eventos_qs.values_list('id_evento', flat=True))
-
-        ordenes_pagadas = Ordenes.objects.filter(
-            id_evento__in=evento_ids,
-            estatus=Ordenes.ESTATUS_PAGADO,
-        )
-        ordenes_pendientes_count = Ordenes.objects.filter(
-            id_evento__in=evento_ids,
-            estatus=Ordenes.ESTATUS_PENDIENTE,
-        ).count()
-
-        agregados = ordenes_pagadas.aggregate(
-            total_vendido=Sum('total'),
-            ordenes_count=Count('id_orden'),
-        )
-        total_vendido = float(agregados['total_vendido'] or 0)
-        ordenes_pagadas_count = int(agregados['ordenes_count'] or 0)
-
-        boletos_vendidos = Tickets.objects.filter(
-            id_orden__in=ordenes_pagadas
-        ).count()
-
-        # Resumen por evento
-        eventos_payload = []
-        for ev in eventos_qs:
-            ev_ordenes_pagadas = ordenes_pagadas.filter(id_evento=ev)
-            ev_revenue = float(
-                ev_ordenes_pagadas.aggregate(total=Sum('total'))['total'] or 0
-            )
-            ev_tickets = Tickets.objects.filter(
-                id_orden__in=ev_ordenes_pagadas
-            ).count()
-
-            capacidad = GridCells.objects.filter(
-                id_layout=ev.id_version_id, tipo='ZONA DE ASIENTOS'
-            ).count()
-            ocupacion = round((ev_tickets / capacidad) * 100, 1) if capacidad else 0.0
-
-            eventos_payload.append({
-                "id_evento": ev.pk,
-                "nombre": ev.nombre,
-                "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
-                "estatus": ev.estatus,
-                "boletos_vendidos": ev_tickets,
-                "asientos_totales": capacidad,
-                "ocupacion_pct": ocupacion,
-                "revenue": ev_revenue,
-            })
+        eventos_payload = self._construir_eventos_payload(eventos_qs, ordenes_pagadas)
 
         eventos_con_ventas = sum(1 for e in eventos_payload if e["boletos_vendidos"] > 0)
-
-        # Órdenes recientes (últimas 10 pagadas)
-        eventos_nombre_map = {e.pk: e.nombre for e in eventos_qs}
-        recientes = list(ordenes_pagadas.order_by('-fecha_creacion')[:10])
-        ordenes_recientes_payload = []
-        for o in recientes:
-            comprador = None
-            try:
-                if o.id_usuario_id:
-                    comprador = o.id_usuario.correo
-            except Exception:
-                pass
-            ordenes_recientes_payload.append({
-                "id_orden": o.pk,
-                "fecha_creacion": o.fecha_creacion.isoformat() if o.fecha_creacion else None,
-                "id_evento": o.id_evento_id,
-                "nombre_evento": eventos_nombre_map.get(
-                    o.id_evento_id, f"Evento #{o.id_evento_id}"
-                ),
-                "total": float(o.total or 0),
-                "estatus": o.estatus,
-                "comprador": comprador,
-            })
+        ordenes_recientes_payload = self._construir_ordenes_recientes_payload(
+            eventos_qs, ordenes_pagadas
+        )
 
         return Response(
             {
@@ -468,9 +555,6 @@ class OrdenesViewSet(viewsets.ModelViewSet):
         This is the authoritative source for the confirmation/receipt page
         instead of relying on navigation state that can get corrupted."""
         from apps.tickets.models import Tickets
-        from apps.eventos.models import Eventos
-        from apps.zonas.models import Zonas
-        from apps.grid_cells.models import GridCells
 
         try:
             orden = Ordenes.objects.get(pk=pk)
@@ -480,10 +564,7 @@ class OrdenesViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Authorization: user can only see their own order (or admin sees all)
-        is_admin = getattr(request.user, "id_rol_id", None) and str(
-            getattr(request.user.id_rol, "nombre", "")
-        ).lower() == "admin"
+        is_admin = self._es_admin(request.user)
         if not is_admin and orden.id_usuario_id != request.user.pk:
             return Response(
                 {"error": "No tienes permiso para ver esta orden."},
@@ -491,51 +572,8 @@ class OrdenesViewSet(viewsets.ModelViewSet):
             )
 
         tickets = list(Tickets.objects.filter(id_orden=orden))
-
-        # Enrich tickets with zone info (via grid_cell → zona)
-        grid_cell_ids = [t.id_grid_cell_id for t in tickets if t.id_grid_cell_id]
-        grid_cells_by_id = {}
-        zonas_by_id = {}
-        if grid_cell_ids:
-            for gc in GridCells.objects.filter(id_grid_cells__in=grid_cell_ids):
-                grid_cells_by_id[gc.id_grid_cells] = gc
-            zona_ids = {gc.id_zona_id for gc in grid_cells_by_id.values() if gc.id_zona_id}
-            if zona_ids:
-                for z in Zonas.objects.filter(pk__in=zona_ids):
-                    zonas_by_id[z.pk] = z
-
-        tickets_payload = []
-        for t in tickets:
-            gc = grid_cells_by_id.get(t.id_grid_cell_id)
-            zona = zonas_by_id.get(gc.id_zona_id) if gc else None
-            label = None
-            if gc is not None and gc.row is not None and gc.col is not None:
-                label = f"F{gc.row + 1}-C{gc.col + 1}"
-            tickets_payload.append(
-                {
-                    "id_ticket": t.pk,
-                    "precio": float(t.precio) if t.precio is not None else 0.0,
-                    "id_grid_cell": t.id_grid_cell_id,
-                    "id_evento": t.id_evento_id,
-                    "label": label,
-                    "zona": zona.nombre if zona else None,
-                }
-            )
-
-        # Event info
-        evento_payload = None
-        try:
-            ev = Eventos.objects.get(pk=orden.id_evento_id)
-            evento_payload = {
-                "id_evento": ev.pk,
-                "nombre": ev.nombre,
-                "descripcion": ev.descripcion,
-                "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
-                "fecha_fin": ev.fecha_fin.isoformat() if ev.fecha_fin else None,
-                "estatus": ev.estatus,
-            }
-        except Eventos.DoesNotExist:
-            pass
+        tickets_payload = self._construir_tickets_payload(tickets)
+        evento_payload = self._obtener_evento_payload(orden.id_evento_id)
 
         return Response(
             {

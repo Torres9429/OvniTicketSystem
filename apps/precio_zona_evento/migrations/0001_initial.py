@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id_precio_zona_evento', models.BigAutoField(primary_key=True, serialize=False)),
                 ('precio', models.FloatField()),
-                ('fecha_creación', models.DateTimeField()),
+                ('fecha_creacion', models.DateTimeField()),
                 ('fecha_actualizacion', models.DateTimeField()),
                 ('id_evento', models.ForeignKey(db_column='id_evento', on_delete=django.db.models.deletion.DO_NOTHING, to='eventos.eventos')),
                 ('id_zona', models.ForeignKey(db_column='id_zona', on_delete=django.db.models.deletion.DO_NOTHING, to='zonas.zonas')),

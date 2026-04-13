@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Script para generar claves de cifrado seguras para AES-256 y HMAC.
 Ejecutar: python generate_keys.py
@@ -15,11 +14,9 @@ def generate_encryption_keys():
     - AES_SECRET_KEY: 32 bytes (256 bits) para AES-256
     - HMAC_SECRET_KEY: 32 bytes (256 bits) para HMAC-SHA256
     """
-    # AES-256 requiere 32 bytes (256 bits)
     aes_key = token_bytes(32)
     aes_key_b64 = base64.urlsafe_b64encode(aes_key).decode('utf-8')
     
-    # HMAC para validar integridad
     hmac_key = token_bytes(32)
     hmac_key_b64 = base64.urlsafe_b64encode(hmac_key).decode('utf-8')
     

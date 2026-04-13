@@ -34,16 +34,9 @@ from apps.ordenes.models import Ordenes
 from apps.ordenes.purchase import ejecutar_compra, PaymentFailedError
 from apps.tickets.models import Tickets
 
-# ---------------------------------------------------------------------------
-# The /comprar/ endpoint is now wired in urls.py + views.py.
-# ---------------------------------------------------------------------------
 _COMPRAR_URL = "/api/ordenes/comprar/"
 _ORDENES_URL = "/api/ordenes/"
 
-
-# ---------------------------------------------------------------------------
-# Fixture helpers
-# ---------------------------------------------------------------------------
 
 def _make_rol(nombre):
     return Roles.objects.create(nombre=nombre)
@@ -79,10 +72,6 @@ def _make_evento(lugar, layout, tiempo_espera=10):
         id_version=layout,
     )
 
-
-# ---------------------------------------------------------------------------
-# Base fixtures
-# ---------------------------------------------------------------------------
 
 class BaseOrdenesTestCase(TestCase):
     """
@@ -155,7 +144,6 @@ class BaseOrdenesTestCase(TestCase):
 
         cls.evento = _make_evento(cls.lugar, cls.layout)
 
-        # Price: 100 per seat in this zone/event
         cls.precio_zona = PrecioZonaEvento.objects.create(
             precio=cls.SEAT_PRICE,
             fecha_creacion=now,
@@ -183,10 +171,6 @@ class BaseOrdenesTestCase(TestCase):
         return [self.cell_1.pk, self.cell_2.pk]
 
 
-# ===========================================================================
-# 1. Service-layer tests for ejecutar_compra
-# ===========================================================================
-
 class TestPurchaseServiceSuccess(BaseOrdenesTestCase):
     """
     test_purchase_endpoint_success — full purchase flow at service layer.
@@ -196,14 +180,12 @@ class TestPurchaseServiceSuccess(BaseOrdenesTestCase):
     """
 
     def test_purchase_service_success(self):
-        # Step 1: hold seats
         retener_asientos(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
             usuario=self.user_a,
         )
 
-        # Step 2: execute purchase
         result = ejecutar_compra(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
@@ -211,14 +193,12 @@ class TestPurchaseServiceSuccess(BaseOrdenesTestCase):
             metodo_pago="mock",
         )
 
-        # Returns dict with orden + tickets
         self.assertIn("orden", result)
         self.assertIn("tickets", result)
 
         orden = result["orden"]
         tickets = result["tickets"]
 
-        # Order assertions
         self.assertIsInstance(orden, Ordenes)
         self.assertEqual(orden.id_evento_id, self.evento.pk)
         self.assertEqual(orden.id_usuario_id, self.user_a.pk)
@@ -226,7 +206,6 @@ class TestPurchaseServiceSuccess(BaseOrdenesTestCase):
         expected_total = self.SEAT_PRICE * 2
         self.assertAlmostEqual(orden.total, expected_total, places=2)
 
-        # One ticket per seat
         self.assertEqual(len(tickets), 2)
         for ticket in tickets:
             self.assertIsInstance(ticket, Tickets)
@@ -234,7 +213,6 @@ class TestPurchaseServiceSuccess(BaseOrdenesTestCase):
             self.assertEqual(ticket.id_evento_id, self.evento.pk)
             self.assertAlmostEqual(ticket.precio, self.SEAT_PRICE, places=2)
 
-        # Seat states must be VENDIDO
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.VENDIDO)
 
@@ -280,7 +258,6 @@ class TestPurchaseServiceSeatsNotHeld(BaseOrdenesTestCase):
     """
 
     def test_purchase_service_seats_not_held(self):
-        # Do NOT call retener_asientos — seats are still DISPONIBLE
         with self.assertRaises(SeatUnavailableError):
             ejecutar_compra(
                 id_evento=self.evento.pk,
@@ -303,7 +280,6 @@ class TestPurchaseServiceSeatsNotHeld(BaseOrdenesTestCase):
                 usuario=self.user_a,
             )
 
-        # user_b's hold should be intact
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.RETENIDO)
             self.assertEqual(e.retenido_por_id, self.user_b.pk)
@@ -337,12 +313,9 @@ class TestPurchaseServicePaymentFailed(BaseOrdenesTestCase):
                 id_evento=self.evento.pk,
                 ids_grid_cell=self.both_cell_ids,
                 usuario=self.user_a,
-                token="fail",  # triggers mock decline
+                token="fail",
             )
 
-        # Payment failed inside @transaction.atomic, so the entire transaction
-        # rolls back. Seats remain in their pre-transaction state (RETENIDO).
-        # They will be released by the lazy expiration check when the hold expires.
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.RETENIDO)
 
@@ -405,19 +378,11 @@ class TestPurchaseServiceAtomicity(BaseOrdenesTestCase):
                     usuario=self.user_a,
                 )
 
-        # Transaction rolled back: no new orders
         self.assertEqual(Ordenes.objects.count(), initial_orders)
 
-        # Seats should have been rolled back to their pre-transaction state
-        # (RETENIDO — the ejecutar_compra atomic block is rolled back,
-        #  but the outer retener_asientos transaction already committed).
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.RETENIDO)
 
-
-# ===========================================================================
-# 2. HTTP layer tests  — /api/ordenes/ CRUD
-# ===========================================================================
 
 class TestOrdenesEndpointAuthentication(BaseOrdenesTestCase):
     """
@@ -498,10 +463,6 @@ class TestOrdenesCreateEndpoint(BaseOrdenesTestCase):
         self.assertEqual(response.status_code, 400)
 
 
-# ===========================================================================
-# 3. /api/ordenes/comprar/ endpoint tests (pending wiring)
-# ===========================================================================
-
 class TestComprarEndpointPendingWiring(BaseOrdenesTestCase):
     """
     These tests will activate once POST /api/ordenes/comprar/ is wired in
@@ -564,7 +525,6 @@ class TestComprarEndpointPendingWiring(BaseOrdenesTestCase):
 
     def test_purchase_endpoint_seats_not_held(self):
         self._skip_if_not_wired()
-        # Seats are DISPONIBLE — not held
         self.client.force_authenticate(user=self.user_a)
         response = self.client.post(
             _COMPRAR_URL,
@@ -577,10 +537,6 @@ class TestComprarEndpointPendingWiring(BaseOrdenesTestCase):
         )
         self.assertEqual(response.status_code, 409)
 
-
-# ===========================================================================
-# 4. Idempotency tests for ejecutar_compra
-# ===========================================================================
 
 class TestEjecutarCompraHappyPath(BaseOrdenesTestCase):
     """Full happy-path purchase with operation_id."""
@@ -607,16 +563,13 @@ class TestEjecutarCompraHappyPath(BaseOrdenesTestCase):
         orden = result["orden"]
         tickets = result["tickets"]
 
-        # Exactly one order, correct status and operation_id
         self.assertEqual(Ordenes.objects.count(), 1)
         self.assertEqual(orden.estatus, Ordenes.ESTATUS_PAGADO)
         self.assertEqual(orden.operation_id, "op-happy-1")
 
-        # Two tickets created
         self.assertEqual(len(tickets), 2)
         self.assertEqual(Tickets.objects.count(), 2)
 
-        # Both seats are VENDIDO
         for e in EstadoAsientoEvento.objects.filter(id_evento=self.evento):
             self.assertEqual(e.estado, EstadoAsientoEvento.VENDIDO)
 
@@ -631,7 +584,6 @@ class TestEjecutarCompraIdempotentReplay(BaseOrdenesTestCase):
             usuario=self.user_a,
         )
 
-        # First call — creates the order
         result_1 = ejecutar_compra(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
@@ -641,7 +593,6 @@ class TestEjecutarCompraIdempotentReplay(BaseOrdenesTestCase):
         )
         orden_pk_1 = result_1["orden"].pk
 
-        # Second call with the SAME operation_id — must short-circuit
         result_2 = ejecutar_compra(
             id_evento=self.evento.pk,
             ids_grid_cell=self.both_cell_ids,
@@ -650,10 +601,8 @@ class TestEjecutarCompraIdempotentReplay(BaseOrdenesTestCase):
             operation_id="op-idempotent-2",
         )
 
-        # No exception raised
         self.assertEqual(result_2["orden"].pk, orden_pk_1)
 
-        # Still exactly one order and two tickets
         self.assertEqual(Ordenes.objects.count(), 1)
         self.assertEqual(Tickets.objects.count(), 2)
 
@@ -673,7 +622,6 @@ class TestEjecutarCompraWithoutOperationIdWorks(BaseOrdenesTestCase):
             ids_grid_cell=self.both_cell_ids,
             usuario=self.user_a,
             metodo_pago="mock",
-            # operation_id omitted
         )
 
         self.assertIn("orden", result)
@@ -715,7 +663,6 @@ class TestEjecutarCompraPaymentFailureReleasesSeats(BaseOrdenesTestCase):
                 operation_id="op-fail-4",
             )
 
-        # Atomic rollback: no order, no tickets
         self.assertEqual(Ordenes.objects.count(), initial_orders)
         self.assertEqual(Tickets.objects.count(), initial_tickets)
 
@@ -724,7 +671,6 @@ class TestEjecutarCompraExpiredHoldRaises(BaseOrdenesTestCase):
     """Expired hold (released by _liberar_expirados) causes SeatUnavailableError."""
 
     def test_expired_hold_raises_seat_unavailable(self):
-        # Plant holds with a past expiry
         past = timezone.now() - timedelta(hours=1)
         EstadoAsientoEvento.objects.filter(id_evento=self.evento).update(
             estado=EstadoAsientoEvento.RETENIDO,
@@ -732,11 +678,9 @@ class TestEjecutarCompraExpiredHoldRaises(BaseOrdenesTestCase):
             retenido_hasta=past,
         )
 
-        # Simulate what happens when the expiry check runs before the purchase
         from apps.asientos.services import _liberar_expirados
         _liberar_expirados(self.evento.pk)
 
-        # Both seats are now DISPONIBLE — purchase must fail
         initial_orders = Ordenes.objects.count()
 
         with self.assertRaises(SeatUnavailableError):
@@ -748,14 +692,9 @@ class TestEjecutarCompraExpiredHoldRaises(BaseOrdenesTestCase):
                 operation_id="op-expired-5",
             )
 
-        # No order or tickets created
         self.assertEqual(Ordenes.objects.count(), initial_orders)
         self.assertEqual(Tickets.objects.count(), 0)
 
-
-# ===========================================================================
-# 5. /api/ordenes/comprar/ HTTP idempotency + validation tests
-# ===========================================================================
 
 class TestComprarAPIIdempotency(BaseOrdenesTestCase):
     """POST /api/ordenes/comprar/ with the same operation_id twice returns 201 both times."""
@@ -779,18 +718,14 @@ class TestComprarAPIIdempotency(BaseOrdenesTestCase):
             "operation_id": "api-op-idempotency-1",
         }
 
-        # First call
         response_1 = self.client.post(_COMPRAR_URL, data=payload, format="json")
         self.assertEqual(response_1.status_code, 201)
 
-        # Second call with same operation_id
         response_2 = self.client.post(_COMPRAR_URL, data=payload, format="json")
         self.assertEqual(response_2.status_code, 201)
 
-        # Only one order must exist
         self.assertEqual(Ordenes.objects.count(), 1)
 
-        # Both responses must reference the same order pk
         self.assertEqual(
             response_1.data["orden"]["id_orden"],
             response_2.data["orden"]["id_orden"],
@@ -812,7 +747,7 @@ class TestComprarAPIBadOperationId(BaseOrdenesTestCase):
                 "id_evento": self.evento.pk,
                 "ids_grid_cell": self.both_cell_ids,
                 "metodo_pago": "mock",
-                "operation_id": "x" * 100,  # 100 chars > 64
+                "operation_id": "x" * 100,
             },
             format="json",
         )

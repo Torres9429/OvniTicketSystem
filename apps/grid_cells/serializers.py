@@ -57,7 +57,6 @@ class GridCellsCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        # Validación cruzada: no puede existir otra celda en la misma posición del mismo layout
         id_layout = data.get('id_layout')
         row = data.get('row')
         col = data.get('col')
@@ -100,7 +99,6 @@ class GridCellsUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        # Excluye la instancia actual de la validación de duplicados
         id_layout = data.get('id_layout')
         row = data.get('row')
         col = data.get('col')

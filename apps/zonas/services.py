@@ -37,7 +37,6 @@ def actualizar_zona(zona: Zonas, nombre: str, color: str, id_layout: int, precio
     zona.fecha_modificacion = now
     zona.id_layout_id = id_layout.pk
     zona.save(update_fields=['nombre', 'color', 'precio', 'fecha_modificacion', 'id_layout'])
-    # Si el precio cambió, propagar a todos los eventos que usan este layout.
     if precio is not None and abs(float(precio) - precio_anterior) > 1e-9:
         propagar_precio_zona_a_eventos(zona, id_usuario=id_usuario, request=request)
     if id_usuario:

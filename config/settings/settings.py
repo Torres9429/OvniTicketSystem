@@ -166,6 +166,8 @@ SIMPLE_JWT = {
 }
 LOGS_DIR = BASE_DIR / "logs"
 os.makedirs(LOGS_DIR, exist_ok=True)
+ROTATING_FILE_HANDLER_CLASS = "logging.handlers.RotatingFileHandler"
+CALLBACK_FILTER_CLASS = "django.utils.log.CallbackFilter"
 
 LOGGING = {
     "version": 1,
@@ -183,59 +185,103 @@ LOGGING = {
             "formatter": "verbose",
             "level": "DEBUG",
         },
-        "file_debug": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(LOGS_DIR / "debug.log"),
+        "file_critical": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "critical.log"),
             "formatter": "verbose",
-            "level": "DEBUG",
-            "maxBytes": 10 * 1024 * 1024,  # 10 MB
-            "backupCount": 5,               # retención: últimos 5 archivos
+            "level": "CRITICAL",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 10,
             "encoding": "utf-8",
+            "filters": ["only_critical"],
         },
         "file_error": {
-            "class": "logging.handlers.RotatingFileHandler",
+            "class": ROTATING_FILE_HANDLER_CLASS,
             "filename": str(LOGS_DIR / "error.log"),
             "formatter": "verbose",
             "level": "ERROR",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 5,
             "encoding": "utf-8",
+            "filters": ["only_error"],
+        },
+        "file_warning": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "warning.log"),
+            "formatter": "verbose",
+            "level": "WARNING",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "filters": ["only_warning"],
+        },
+        "file_info": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "info.log"),
+            "formatter": "verbose",
+            "level": "INFO",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "filters": ["only_info"],
+        },
+        "file_debug": {
+            "class": ROTATING_FILE_HANDLER_CLASS,
+            "filename": str(LOGS_DIR / "debug.log"),
+            "formatter": "verbose",
+            "level": "DEBUG",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "filters": ["only_debug"],
         },
     },
     "filters": {
-        "only_debug": {
-            "()": "django.utils.log.CallbackFilter",
-            "callback": lambda record: record.levelno <= 10,  # solo DEBUG
+        "only_critical": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 50,
         },
         "only_error": {
-            "()": "django.utils.log.CallbackFilter",
-            "callback": lambda record: record.levelno >= 40,  # solo ERROR+
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 40,
+        },
+        "only_warning": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 30,
+        },
+        "only_info": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 20,
+        },
+        "only_debug": {
+            "()": CALLBACK_FILTER_CLASS,
+            "callback": lambda record: record.levelno == 10,
         },
     },
     "loggers": {
         "django": {
-            "handlers": ["console", "file_debug"],
-            "level": "INFO",
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
+            "level": "DEBUG",
             "propagate": False,
         },
         "apps.eventos": {
-            "handlers": ["console", "file_debug", "file_error"],
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
             "level": "DEBUG",
             "propagate": False,
         },
         "apps.lugares": {
-            "handlers": ["console", "file_debug", "file_error"],
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
             "level": "DEBUG",
             "propagate": False,
         },
         "apps.layouts": {
-            "handlers": ["console", "file_debug", "file_error"],
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
             "level": "DEBUG",
             "propagate": False,
         },
     },
     "root": {
-        "handlers": ["console", "file_debug", "file_error"],
+        "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error", "file_critical"],
         "level": "DEBUG",
     },
 }

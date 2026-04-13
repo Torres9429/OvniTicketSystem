@@ -77,9 +77,6 @@ class AsientosViewSet(viewsets.ViewSet):
         delete_asiento(asiento, id_usuario=request.user, request=request)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
-# ───────────────── Seat availability & reservation endpoints ─────────────────
-
 class DisponibilidadAsientosView(APIView):
     """GET /api/asientos/disponibilidad/<id_evento>/
     Returns seat states for an event. Auto-initialises state rows if needed."""
@@ -92,7 +89,6 @@ class DisponibilidadAsientosView(APIView):
         except Eventos.DoesNotExist:
             return Response({'error': 'Evento no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Lazy-initialise seat states from the event's layout
         inicializar_estado_asientos(id_evento, evento.id_version_id)
 
         disponibilidad = list(obtener_disponibilidad_evento(id_evento))
@@ -143,8 +139,6 @@ class LiberarAsientosView(APIView):
 
 
 class ConfirmarCompraView(APIView):
-    """POST /api/asientos/confirmar/
-    Body: { id_evento, ids_grid_cell: [int, ...] }"""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -165,12 +159,9 @@ class ConfirmarCompraView(APIView):
 
 
 class HoldStatusView(APIView):
-    """GET /api/asientos/hold-status/<int:id_evento>/
-    Returns the current hold state for the authenticated user for a given event."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id_evento):
-        # Release stale holds first so they don't appear as active
         _liberar_expirados(id_evento)
 
         holds = list(
@@ -191,7 +182,6 @@ class HoldStatusView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        # Use the MAX retenido_hasta in case of multiple rows (shouldn't happen in practice)
         max_expiry = max(h.retenido_hasta for h in holds)
         ids_grid_cell = [h.id_grid_cell_id for h in holds]
 

@@ -20,8 +20,6 @@ def crear_evento(nombre: str, descripcion: str, fecha_inicio, fecha_fin, tiempo_
         fecha_creacion = now,
         fecha_actualizacion = now
     )
-    # Copia automáticamente los precios de las zonas del layout a
-    # PrecioZonaEvento para que la compra funcione sin configuración manual.
     sincronizar_precios_zona_evento(evento, id_usuario=id_usuario, request=request)
     if id_usuario:
         registrar_auditoria(
@@ -48,9 +46,7 @@ def actualizar_evento(evento: Eventos, nombre: str, descripcion: str, fecha_inic
     evento.id_lugar = id_lugar
     evento.id_version = id_version
     evento.save( update_fields=['nombre', 'descripcion', 'fecha_inicio', 'fecha_fin', 'tiempo_espera', 'foto', 'estatus', 'id_lugar', 'id_version', 'fecha_actualizacion'])
-    # Si el organizador cambió el layout o actualizó precios en las zonas del
-    # layout, re-sincroniza los PrecioZonaEvento faltantes (no sobrescribe
-    # precios ya establecidos por evento).
+
     sincronizar_precios_zona_evento(evento, id_usuario=id_usuario, request=request)
     if id_usuario:
         registrar_auditoria(
