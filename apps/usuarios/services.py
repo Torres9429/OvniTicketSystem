@@ -73,6 +73,20 @@ def aprobar_usuario(usuario: Usuarios, request=None) -> Usuarios:
     )
     return usuario
 
+def reactivar_usuario(usuario: Usuarios, request=None) -> Usuarios:
+    valores_antes={'estatus': usuario.estatus}
+    usuario.estatus = 'activo'
+    usuario.fecha_actualizacion = timezone.now()
+    usuario.save(update_fields=['estatus', 'fecha_actualizacion'])
+    registrar_auditoria(
+        entidad='usuarios',
+        accion='REACTIVAR',
+        id_usuario=usuario,
+        valores_antes=valores_antes,
+        valores_despues={'estatus': 'activo'},
+        ip=request,
+    )
+    return usuario
 
 def desactivar_usuario(usuario: Usuarios, request=None) -> Usuarios:
     valores_antes={'estatus': usuario.estatus}
