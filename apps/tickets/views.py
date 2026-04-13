@@ -1,7 +1,9 @@
 import logging
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from apps.common.permissions import IsAdmin
 from .models import Tickets
 from .serializers import (
     TicketsListSerializer, TicketsDetailSerializer,
@@ -16,6 +18,11 @@ ERROR_TICKET_NO_ENCONTRADO = "Ticket no encontrado"
 
 class TicketsViewSet(viewsets.ModelViewSet):
     queryset = Tickets.objects.all()
+
+    def get_permissions(self):
+        if self.action in ('create', 'list', 'retrieve'):
+            return [IsAuthenticated()]
+        return [IsAdmin()]
 
     def get_queryset(self):
         return Tickets.objects.all()

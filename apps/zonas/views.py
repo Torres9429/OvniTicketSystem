@@ -1,14 +1,21 @@
 import logging
-from rest_framework import viewsets
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from apps.common.permissions import IsOrganizador
 from .models import Zonas
 from .services import crear_zona, actualizar_zona, eliminar_zona
 from .selectors import get_all_zonas, buscar_zona_por_id, buscar_zona_por_nombre, buscar_zona_por_color, buscar_zona_por_fecha_creacion, buscar_zona_por_layout
 from .serializers import (ZonasSerializer, ZonasListSerializer, ZonasCreateSerializer, ZonasUpdateSerializer, ZonasDetailSerializer)
-from rest_framework.response import Response
-from rest_framework import status
+
 logger = logging.getLogger(__name__)
 
 class ZonasViewSet(viewsets.ViewSet):
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated()]
+        return [IsOrganizador()]
     def get_serializer_class(self):
         if self.action == "list":
             return ZonasListSerializer
@@ -45,6 +52,7 @@ class ZonasViewSet(viewsets.ViewSet):
                 nombre=serializer.validated_data.get('nombre'),
                 color=serializer.validated_data.get('color'),
                 id_layout=serializer.validated_data.get('id_layout'),
+                precio=serializer.validated_data.get('precio', 0),
                 id_usuario=request.user,
                 request=request
             )

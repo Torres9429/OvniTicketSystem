@@ -14,7 +14,7 @@ def crear_grid_cell(tipo: str, row: int, col: int, id_zona, id_layout, id_usuari
         tipo=tipo,
         row=row,
         col=col,
-        id_zona_id=id_zona.pk,
+        id_zona_id=id_zona.pk if id_zona else None,
         id_layout_id=id_layout.pk,
     )
     if id_usuario:
@@ -23,18 +23,18 @@ def crear_grid_cell(tipo: str, row: int, col: int, id_zona, id_layout, id_usuari
             accion='CREAR',
             id_usuario=id_usuario,
             valores_antes=None,
-            valores_despues={'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': id_zona.nombre, 'id_layout': id_layout.pk},
+            valores_despues={'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': id_zona.nombre if id_zona else None, 'id_layout': id_layout.pk},
             ip=request,
         )
     return grid_cell
 
 
 def actualizar_grid_cell(grid_cell: GridCells, tipo: str, row: int, col: int, id_zona, id_layout, id_usuario=None, request=None) -> GridCells:
-    valores_antes = {'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': id_zona.nombre, 'id_layout': id_layout.pk}
+    valores_antes = {'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': getattr(grid_cell.id_zona, 'nombre', None), 'id_layout': grid_cell.id_layout_id}
     grid_cell.tipo = tipo
     grid_cell.row = row
     grid_cell.col = col
-    grid_cell.id_zona_id = id_zona.pk 
+    grid_cell.id_zona_id = id_zona.pk if id_zona else None
     grid_cell.id_layout_id = id_layout.pk
     grid_cell.save(update_fields=['tipo', 'row', 'col', 'id_zona_id', 'id_layout_id'])
     if id_usuario:
@@ -43,14 +43,14 @@ def actualizar_grid_cell(grid_cell: GridCells, tipo: str, row: int, col: int, id
             accion='ACTUALIZAR',
             id_usuario=id_usuario,
             valores_antes=valores_antes,
-            valores_despues={'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': id_zona.nombre, 'id_layout': id_layout.pk},
+            valores_despues={'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': id_zona.nombre if id_zona else None, 'id_layout': id_layout.pk},
             ip=request,
         )
     return grid_cell
 
 
 def eliminar_grid_cell(grid_cell: GridCells, id_usuario=None, request=None) -> None:
-    valores_antes = {'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': grid_cell.id_zona.pk, 'id_layout': grid_cell.id_layout.pk}
+    valores_antes = {'tipo': grid_cell.tipo, 'row': grid_cell.row, 'col': grid_cell.col, 'id_zona': getattr(grid_cell.id_zona, 'pk', None), 'id_layout': grid_cell.id_layout_id}
     if id_usuario:
         registrar_auditoria(
             entidad='grid_cells',

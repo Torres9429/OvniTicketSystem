@@ -1,7 +1,9 @@
 import logging
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from apps.common.permissions import IsOrganizador
 from .models import GridCells
 from .serializers import (GridCellsListSerializer, GridCellsDetailSerializer,  GridCellsCreateSerializer, GridCellsUpdateSerializer)
 from .services import crear_grid_cell, actualizar_grid_cell, eliminar_grid_cell
@@ -12,6 +14,11 @@ logger = logging.getLogger(__name__)
 
 class GridCellsViewSet(viewsets.ModelViewSet):
     queryset = GridCells.objects.all()
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve', 'por_layout'):
+            return [IsAuthenticated()]
+        return [IsOrganizador()]
 
     not_found_cell = "Celda no encontrada"
 

@@ -7,7 +7,7 @@ class GridCells(models.Model):
     tipo = models.CharField(max_length=16)
     row = models.IntegerField()
     col = models.IntegerField()
-    id_zona = models.ForeignKey(Zonas, on_delete=models.DO_NOTHING, db_column='id_zona')
+    id_zona = models.ForeignKey(Zonas, on_delete=models.DO_NOTHING, db_column='id_zona', null=True, blank=True)
     id_layout = models.ForeignKey(Layouts, on_delete=models.DO_NOTHING, db_column='id_layout')
 
     class Meta:

@@ -20,3 +20,8 @@ def buscar_lugares_por_nombre(nombre: str):
 def buscar_lugares_por_ciudad(ciudad: str):
     lugares = Lugares.objects.filter(ciudad__icontains=ciudad, estatus='PUBLICADO')
     return lugares
+
+
+def get_lugares_por_dueno(id_dueno: int):
+    """Obtener todos los lugares de un dueño específico"""
+    return Lugares.objects.filter(id_dueno=id_dueno)

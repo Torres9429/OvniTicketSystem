@@ -2,7 +2,7 @@ from django.utils import timezone
 from .models import Ordenes
 from apps.auditoria_logs.services import registrar_auditoria
 
-def crear_orden(total: float, estatus: str, id_evento, id_usuario, request=None) -> Ordenes:
+def crear_orden(total: float, estatus: str, id_evento, id_usuario, operation_id=None, request=None) -> Ordenes:
     now = timezone.now()
     orden = Ordenes.objects.create(
         total=total,
@@ -11,6 +11,7 @@ def crear_orden(total: float, estatus: str, id_evento, id_usuario, request=None)
         fecha_actualizacion=now,
         id_evento_id=id_evento.pk,
         id_usuario_id=id_usuario.pk,
+        operation_id=operation_id,
     )
     registrar_auditoria(
         entidad='ordenes',

@@ -1,17 +1,26 @@
 import logging
 from rest_framework.decorators import action
 from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
+from apps.common.permissions import IsOrganizador
 from .services import crear_evento, actualizar_evento, activar_evento, desactivar_evento, eliminar_evento
 from .serializers import (EventosListSerializer, EventosDetailSerializer, EventosCreateSerializer, EventosUpdateSerializer)
 from .models import Eventos
-from .selectors import get_eventos_disponibles, get_all_eventos
+from .selectors import get_eventos_disponibles, get_all_eventos, get_eventos_por_usuario
 
 logger = logging.getLogger(__name__)
 
 class EventosViewSet(viewsets.ModelViewSet):
     queryset = Eventos.objects.all()
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()]
+        if self.action == 'all':
+            return [IsAuthenticated()]
+        return [IsOrganizador()]
 
     def get_queryset(self):
         if self.action == "list":
@@ -182,5 +191,22 @@ class EventosViewSet(viewsets.ModelViewSet):
             logger.error(f"GET /eventos/ — error al listar: {e}", exc_info=True)
             return Response(
                 {"error": "Error al obtener eventos"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+    @action(detail=False, methods=["get"], url_path='by-usuario')
+    def por_usuario(self, request):
+        id_usuario = request.query_params.get('id_usuario')
+        if not id_usuario:
+            logger.warning("GET /eventos/by-usuario/ — id_usuario no proporcionado")
+            return Response({"error": "id_usuario es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            eventos = get_eventos_por_usuario(id_usuario=id_usuario)
+            serializer = EventosListSerializer(eventos, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"GET /eventos/by-usuario/ — error al listar por usuario: {e}", exc_info=True)
+            return Response(
+                {"error": "Error al obtener eventos por usuario"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
