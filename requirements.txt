@@ -4,10 +4,13 @@ Django==6.0.3
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.4.0
+gunicorn==23.0.0
 PyMySQL==1.1.1
 pycryptodome==3.23.0
 PyJWT==2.12.1
+cryptography
 python-decouple==3.8
 sqlparse==0.5.5
 tzdata==2025.3
+whitenoise==6.9.0
 django-ipware==7.0.1
