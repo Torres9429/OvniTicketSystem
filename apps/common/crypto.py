@@ -119,7 +119,8 @@ def decrypt_payload(encrypted_data: str) -> dict:
     try:
         aes_key, hmac_key = _get_keys()
         
-        payload = _urlsafe_b64decode_with_padding(encrypted_data)
+        padded = encrypted_data + '=' * (-len(encrypted_data) % 4)
+        payload = base64.urlsafe_b64decode(padded)
         
         nonce = payload[:16]
         auth_tag = payload[-32:]
