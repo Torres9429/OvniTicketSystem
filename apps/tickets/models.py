@@ -8,6 +8,8 @@ from apps.grid_cells.models import GridCells
 class Tickets(models.Model):
     id_ticket = models.BigAutoField(primary_key=True)
     precio = models.FloatField()
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
     id_orden = models.ForeignKey(Ordenes, on_delete=models.DO_NOTHING, db_column='id_orden')
     id_asiento = models.ForeignKey(Asientos, on_delete=models.DO_NOTHING, db_column='id_asiento', null=True, blank=True)
     id_grid_cell = models.ForeignKey(GridCells, on_delete=models.DO_NOTHING, db_column='id_grid_cell', null=True, blank=True)

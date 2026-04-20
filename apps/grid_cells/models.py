@@ -7,6 +7,8 @@ class GridCells(models.Model):
     tipo = models.CharField(max_length=16)
     row = models.IntegerField()
     col = models.IntegerField()
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
     id_zona = models.ForeignKey(Zonas, on_delete=models.DO_NOTHING, db_column='id_zona', null=True, blank=True)
     id_layout = models.ForeignKey(Layouts, on_delete=models.DO_NOTHING, db_column='id_layout')
 

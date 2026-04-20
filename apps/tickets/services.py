@@ -1,5 +1,6 @@
 from .models import Tickets
 from apps.auditoria_logs.services import registrar_auditoria
+from django.utils import timezone
 
 def crear_ticket(precio: float, id_orden, id_asiento, id_evento, id_usuario=None, request=None) -> Tickets:
     ticket = Tickets.objects.create(
@@ -7,6 +8,8 @@ def crear_ticket(precio: float, id_orden, id_asiento, id_evento, id_usuario=None
         id_orden_id=id_orden.pk,
         id_asiento_id=id_asiento.pk,
         id_evento_id=id_evento.pk,
+        fecha_creacion=timezone.now(),
+        fecha_actualizacion=timezone.now(),
     )
     if id_usuario:
         registrar_auditoria(
@@ -26,21 +29,22 @@ def actualizar_ticket(ticket: Tickets, precio: float, id_orden, id_asiento, id_e
     ticket.id_orden = id_orden
     ticket.id_asiento = id_asiento
     ticket.id_evento = id_evento
-    ticket.save(update_fields=['precio', 'id_orden', 'id_asiento', 'id_evento'])
+    ticket.fecha_actualizacion = timezone.now()
+    ticket.save(update_fields=['precio', 'id_orden', 'id_asiento', 'id_evento', 'fecha_actualizacion'])
     if id_usuario:
         registrar_auditoria(
             entidad='tickets',
             accion='ACTUALIZAR',
             id_usuario=id_usuario,
             valores_antes=valores_antes,
-            valores_despues={'precio': ticket.precio, 'id_orden': ticket.id_orden.pk, 'id_asiento': ticket.id_asiento.pk, 'id_evento': ticket.id_evento.pk},
+            valores_despues={'precio': ticket.precio, 'id_orden': ticket.id_orden.pk, 'id_asiento': ticket.id_asiento.pk, 'id_evento': ticket.id_evento.pk, 'fecha_actualizacion': str(ticket.fecha_actualizacion)},
             ip=request,
         )
     return ticket
 
 
 def eliminar_ticket(ticket: Tickets, id_usuario=None, request=None) -> None:
-    valores_antes = {'precio': ticket.precio, 'id_orden': ticket.id_orden.pk, 'id_asiento': ticket.id_asiento.pk, 'id_evento': ticket.id_evento.pk}
+    valores_antes = {'precio': ticket.precio, 'id_orden': ticket.id_orden.pk, 'id_asiento': ticket.id_asiento.pk, 'id_evento': ticket.id_evento.pk, 'fecha_actualizacion': str(ticket.fecha_actualizacion)}
     if id_usuario:
         registrar_auditoria(
             entidad='tickets',

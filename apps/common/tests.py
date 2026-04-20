@@ -97,6 +97,14 @@ class CryptoTestCase(TestCase):
         """Test que Base64 inválido raises exception."""
         with self.assertRaises(CryptoException):
             decrypt_payload("not-valid-base64!!!")
+
+    def test_decrypt_accepts_unpadded_base64url(self):
+        """Acepta payloads URL-safe sin '=' padding (compatibilidad frontend)."""
+        encrypted = encrypt_payload(self.test_data)
+        unpadded = encrypted.rstrip("=")
+
+        decrypted = decrypt_payload(unpadded)
+        self.assertEqual(decrypted, self.test_data)
     
     def test_malformed_json_raises_exception(self):
         """Test que plaintext no-JSON raises exception."""

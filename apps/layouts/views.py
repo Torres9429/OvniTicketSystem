@@ -179,6 +179,33 @@ class LayoutsViewSet(viewsets.ModelViewSet):
                 {"error": "Error al obtener layouts"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=False, methods=["get"])
+    def por_lugar(self, request):
+        """Obtiene todos los layouts de un lugar específico"""
+        id_lugar = request.query_params.get('id_lugar')
+        if not id_lugar:
+            return Response(
+                {"error": "El parámetro 'id_lugar' es obligatorio"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            layouts = get_all_layouts_por_lugar(int(id_lugar))
+            serializer = LayoutsListSerializer(layouts, many=True)
+            logger.info(f"GET /layouts/por_lugar/?id_lugar={id_lugar} — {len(layouts)} layouts retornados")
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ValueError:
+            return Response(
+                {"error": "El valor de 'id_lugar' debe ser un número entero"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"GET /layouts/por_lugar/?id_lugar={id_lugar} — error: {e}", exc_info=True)
+            return Response(
+                {"error": "Error al obtener layouts"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=["patch"])
     def save_snapshot(self, request, pk=None):
