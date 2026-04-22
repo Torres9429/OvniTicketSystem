@@ -1,7 +1,7 @@
 import logging
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from apps.common.permissions import IsOrganizador
 from .models import GridCells
@@ -18,7 +18,7 @@ class GridCellsViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve', 'por_layout'):
-            return [IsAuthenticated()]
+            return [AllowAny()]
         return [IsOrganizador()]
 
     not_found_cell = "Celda no encontrada"
