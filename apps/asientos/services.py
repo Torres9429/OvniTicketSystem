@@ -16,7 +16,8 @@ def create_asiento(data, id_usuario=None, request=None):
         grid_col=data.get('grid_col'),
         numero_asiento=data.get('numero_asiento'),
         existe=data.get('existe'),
-        id_zona=data.get('id_zona')
+        id_zona=data.get('id_zona'),
+        id_grid_cell=data.get('id_grid_cell'),
     )
     if id_usuario:
         registrar_auditoria(
@@ -24,19 +25,34 @@ def create_asiento(data, id_usuario=None, request=None):
             accion='CREAR',
             id_usuario=id_usuario,
             valores_antes=None,
-            valores_despues={'grid_row': asiento.grid_row, 'grid_col': asiento.grid_col, 'numero_asiento': asiento.numero_asiento, 'existe': asiento.existe, 'id_zona': asiento.id_zona.pk},
+            valores_despues={
+                'grid_row': asiento.grid_row,
+                'grid_col': asiento.grid_col,
+                'numero_asiento': asiento.numero_asiento,
+                'existe': asiento.existe,
+                'id_zona': asiento.id_zona.pk,
+                'id_grid_cell': asiento.id_grid_cell_id,
+            },
             ip=request,
         )
     return asiento
 
 def update_asiento(asiento, data, id_usuario=None, request=None):
-    valores_antes = {'grid_row': asiento.grid_row, 'grid_col': asiento.grid_col, 'numero_asiento': asiento.numero_asiento, 'existe': asiento.existe, 'id_zona': asiento.id_zona.pk}
+    valores_antes = {
+        'grid_row': asiento.grid_row,
+        'grid_col': asiento.grid_col,
+        'numero_asiento': asiento.numero_asiento,
+        'existe': asiento.existe,
+        'id_zona': asiento.id_zona.pk,
+        'id_grid_cell': asiento.id_grid_cell_id,
+    }
     asiento.grid_row = data.get('grid_row', asiento.grid_row)
     asiento.grid_col = data.get('grid_col', asiento.grid_col)
     asiento.numero_asiento = data.get('numero_asiento', asiento.numero_asiento)
     asiento.existe = data.get('existe', asiento.existe)
     id_zona = data.get('id_zona', asiento.id_zona)
     asiento.id_zona_id = id_zona.pk
+    asiento.id_grid_cell = data.get('id_grid_cell', asiento.id_grid_cell)
     asiento.save()
     if id_usuario:
         registrar_auditoria(
@@ -44,7 +60,14 @@ def update_asiento(asiento, data, id_usuario=None, request=None):
             accion='ACTUALIZAR',
             id_usuario=id_usuario,
             valores_antes=valores_antes,
-            valores_despues={'grid_row': asiento.grid_row, 'grid_col': asiento.grid_col, 'numero_asiento': asiento.numero_asiento, 'existe': asiento.existe, 'id_zona': asiento.id_zona.pk},
+            valores_despues={
+                'grid_row': asiento.grid_row,
+                'grid_col': asiento.grid_col,
+                'numero_asiento': asiento.numero_asiento,
+                'existe': asiento.existe,
+                'id_zona': asiento.id_zona.pk,
+                'id_grid_cell': asiento.id_grid_cell_id,
+            },
             ip=request,
         )
     return asiento

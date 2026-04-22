@@ -13,6 +13,7 @@ import logging
 from django.db import transaction
 
 from apps.asientos.models import EstadoAsientoEvento
+from apps.asientos.models import Asientos
 from apps.asientos.services import confirmar_compra, liberar_asientos_usuario, SeatUnavailableError
 from apps.eventos.models import Eventos
 from apps.grid_cells.models import GridCells
@@ -188,16 +189,21 @@ def ejecutar_compra(
     )
 
     cell_pk_to_cell = {cell.id_grid_cells: cell for cell in cells}
+    asientos_por_grid_cell = {
+        asiento.id_grid_cell_id: asiento
+        for asiento in Asientos.objects.filter(id_grid_cell_id__in=ids_grid_cell)
+    }
     tickets: list[Tickets] = []
 
     for cell_pk in ids_grid_cell:
         cell = cell_pk_to_cell[cell_pk]
         precio = zone_price_map[cell.id_zona_id]
+        asiento = asientos_por_grid_cell.get(cell_pk)
 
         ticket = Tickets.objects.create(
             precio=precio,
             id_orden=orden,
-            id_asiento=None,
+            id_asiento=asiento,
             id_grid_cell=cell,
             id_evento=evento,
         )

@@ -22,3 +22,14 @@ def get_ultima_version_layout_por_lugar(id_lugar: int, include_drafts=False):
     if not include_drafts:
         qs = qs.filter(estatus='PUBLICADO')
     return qs.order_by('-version', '-id_layout').first()
+
+def get_all_layouts_por_lugar(id_lugar: int):
+    return Layouts.objects.filter(id_lugar=id_lugar).order_by('-version')
+
+
+def get_ultima_version_por_lugar(id_lugar: int):
+    return (
+        Layouts.objects.filter(id_lugar=id_lugar)
+        .order_by('-version')
+        .first()
+    )

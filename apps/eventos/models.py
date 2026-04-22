@@ -17,11 +17,11 @@ class Eventos(models.Model):
 
     id_evento = models.BigAutoField(primary_key=True)
     nombre = models.CharField(max_length=100)
-    descripcion = models.CharField(max_length=150, null=True, blank=True)
+    descripcion = models.CharField(max_length=150, blank=True, default='')
     fecha_inicio = models.DateTimeField()
     fecha_fin = models.DateTimeField()
     tiempo_espera = models.IntegerField()
-    foto = models.TextField(blank=True, null=True)
+    foto = models.TextField(blank=True, default='')
     estatus = models.CharField(max_length=10, choices=ESTATUS_CHOICES)
     fecha_creacion = models.DateTimeField()
     fecha_actualizacion = models.DateTimeField()

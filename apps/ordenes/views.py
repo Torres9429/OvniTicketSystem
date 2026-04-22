@@ -11,7 +11,12 @@ from apps.common.permissions import IsAdmin
 
 from .models import Ordenes
 from .purchase import EventPricingError, PaymentFailedError, ejecutar_compra
-from .selectors import get_all_ordenes, get_ordenes_por_evento, get_ordenes_por_usuario
+from .selectors import (
+    get_all_ordenes,
+    get_dashboard_ventas_por_organizador,
+    get_ordenes_por_evento,
+    get_ordenes_por_usuario,
+)
 from .serializers import (
     OrdenesCreateSerializer,
     OrdenesDetailSerializer,
@@ -517,37 +522,9 @@ class OrdenesViewSet(viewsets.ModelViewSet):
           ]
         }
         """
-        (
-            eventos_qs,
-            ordenes_pagadas,
-            total_vendido,
-            ordenes_pagadas_count,
-            ordenes_pendientes_count,
-            boletos_vendidos,
-        ) = self._obtener_contexto_ventas(request.user)
+        payload = get_dashboard_ventas_por_organizador(request.user.pk)
 
-        eventos_payload = self._construir_eventos_payload(eventos_qs, ordenes_pagadas)
-
-        eventos_con_ventas = sum(1 for e in eventos_payload if e["boletos_vendidos"] > 0)
-        ordenes_recientes_payload = self._construir_ordenes_recientes_payload(
-            eventos_qs, ordenes_pagadas
-        )
-
-        return Response(
-            {
-                "resumen": {
-                    "total_vendido": total_vendido,
-                    "boletos_vendidos": boletos_vendidos,
-                    "ordenes_pagadas": ordenes_pagadas_count,
-                    "ordenes_pendientes": ordenes_pendientes_count,
-                    "eventos_totales": len(eventos_payload),
-                    "eventos_con_ventas": eventos_con_ventas,
-                },
-                "eventos": eventos_payload,
-                "ordenes_recientes": ordenes_recientes_payload,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response(payload, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"], url_path="detalle")
     def detalle(self, request, pk=None):

@@ -9,7 +9,7 @@ from apps.common.permissions import IsOrganizador
 from .services import crear_layout, actualizar_layout, activar_layout, desactivar_layout
 from .serializers import (LayoutsListSerializer, LayoutsDetailSerializer, LayoutsCreateSerializer, LayoutsUpdateSerializer)
 from .models import Layouts
-from .selectors import get_layouts_disponibles, get_all_layouts, get_ultima_version_layout_por_lugar
+from .selectors import get_layouts_disponibles, get_all_layouts, get_ultima_version_layout_por_lugar, get_all_layouts_por_lugar, get_ultima_version_por_lugar
 
 logger = logging.getLogger(__name__)
 ERROR_LAYOUT_NO_ENCONTRADO = "Layout no encontrado"
@@ -19,7 +19,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated()]
+            return [AllowAny()]
         return [IsOrganizador()]
 
     def get_queryset(self):
@@ -179,6 +179,33 @@ class LayoutsViewSet(viewsets.ModelViewSet):
                 {"error": "Error al obtener layouts"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=False, methods=["get"])
+    def por_lugar(self, request):
+        """Obtiene todos los layouts de un lugar específico"""
+        id_lugar = request.query_params.get('id_lugar')
+        if not id_lugar:
+            return Response(
+                {"error": "El parámetro 'id_lugar' es obligatorio"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            layouts = get_all_layouts_por_lugar(int(id_lugar))
+            serializer = LayoutsListSerializer(layouts, many=True)
+            logger.info(f"GET /layouts/por_lugar/?id_lugar={id_lugar} — {len(layouts)} layouts retornados")
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ValueError:
+            return Response(
+                {"error": "El valor de 'id_lugar' debe ser un número entero"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"GET /layouts/por_lugar/?id_lugar={id_lugar} — error: {e}", exc_info=True)
+            return Response(
+                {"error": "Error al obtener layouts"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=["patch"])
     def save_snapshot(self, request, pk=None):
@@ -188,7 +215,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        layout = actualizar_layout(layout, **serializer.validated_data, request=request)
+        layout = actualizar_layout(layout, request=request, **serializer.validated_data)
         output = LayoutsDetailSerializer(layout)
         return Response(output.data, status=status.HTTP_200_OK)
 
@@ -220,3 +247,44 @@ class LayoutUltimaVersionView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+    @action(detail=False, methods=["get"])
+    def por_lugar(self, request):
+        id_lugar = request.query_params.get('id_lugar')
+        if not id_lugar:
+            return Response(
+                {"error": "Se requiere el parámetro id_lugar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            layouts = get_all_layouts_por_lugar(int(id_lugar))
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "id_lugar debe ser un número válido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = LayoutsListSerializer(layouts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"])
+    def ultima_version(self, request):
+        id_lugar = request.query_params.get('id_lugar')
+        if not id_lugar:
+            return Response(
+                {"error": "Se requiere el parámetro id_lugar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            layout = get_ultima_version_por_lugar(int(id_lugar))
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "id_lugar debe ser un número válido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not layout:
+            return Response(
+                {"error": "No se encontró ningún layout para este lugar."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = LayoutsDetailSerializer(layout)
+        return Response(serializer.data, status=status.HTTP_200_OK)

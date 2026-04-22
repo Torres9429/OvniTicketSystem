@@ -1,23 +1,30 @@
 from rest_framework import serializers
 from .models import Asientos
+from apps.grid_cells.models import GridCells
 from apps.zonas.models import Zonas
 
 class AsientosListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asientos
-        fields = ('id_asiento', 'grid_row', 'grid_col', 'numero_asiento', 'existe')
+        fields = ('id_asiento', 'grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_grid_cell')
 
 
 class AsientosDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asientos
-        fields = ('id_asiento', 'grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_zona')
+        fields = ('id_asiento', 'grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_zona', 'id_grid_cell')
 
 
 class AsientosCreateSerializer(serializers.ModelSerializer):
+    id_grid_cell = serializers.PrimaryKeyRelatedField(
+        queryset=GridCells.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = Asientos
-        fields = ('grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_zona')
+        fields = ('grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_zona', 'id_grid_cell')
 
     def validate(self, data):
         if data.get('grid_row') < 0:
@@ -34,10 +41,15 @@ class AsientosCreateSerializer(serializers.ModelSerializer):
 
 class AsientosUpdateSerializer(serializers.ModelSerializer):
     id_zona = serializers.PrimaryKeyRelatedField(queryset=Zonas.objects.all())
+    id_grid_cell = serializers.PrimaryKeyRelatedField(
+        queryset=GridCells.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     
     class Meta:
         model = Asientos
-        fields = ('grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_zona')
+        fields = ('grid_row', 'grid_col', 'numero_asiento', 'existe', 'id_zona', 'id_grid_cell')
 
     def validate(self, data):
         if 'grid_row' in data and data['grid_row'] < 0:
