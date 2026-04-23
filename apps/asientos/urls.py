@@ -7,6 +7,7 @@ from .views import (
     LiberarAsientosView,
     ConfirmarCompraView,
     HoldStatusView,
+    RecomendacionAsientosView,
 )
 
 router = DefaultRouter()
@@ -18,4 +19,5 @@ urlpatterns = [
     path('asientos/liberar/', LiberarAsientosView.as_view(), name='asientos-liberar'),
     path('asientos/confirmar/', ConfirmarCompraView.as_view(), name='asientos-confirmar'),
     path('asientos/hold-status/<int:id_evento>/', HoldStatusView.as_view(), name='asientos-hold-status'),
+    path('asientos/recomendacion/', RecomendacionAsientosView.as_view(), name='asientos-recomendacion'),
 ] + router.urls

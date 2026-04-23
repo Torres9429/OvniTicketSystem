@@ -25,6 +25,9 @@ class Eventos(models.Model):
     estatus = models.CharField(max_length=10, choices=ESTATUS_CHOICES)
     fecha_creacion = models.DateTimeField()
     fecha_actualizacion = models.DateTimeField()
+    boletos_vendidos = models.IntegerField(default=0, db_column='boletos_vendidos')
+    ingresos_totales = models.FloatField(default=0.0, db_column='ingresos_totales')
+    ocupacion_pct = models.FloatField(default=0.0, db_column='ocupacion_pct')
     id_lugar = models.ForeignKey(Lugares, on_delete=models.DO_NOTHING, db_column='id_lugar')
     id_version = models.ForeignKey(Layouts, on_delete=models.DO_NOTHING, db_column='id_version')
 

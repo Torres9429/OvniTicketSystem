@@ -6,12 +6,17 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.asientos.services import SeatUnavailableError
+from apps.asientos.services import SeatUnavailableError, resolve_layout_seat_refs_to_grid_cells
 from apps.common.permissions import IsAdmin
 
 from .models import Ordenes
 from .purchase import EventPricingError, PaymentFailedError, ejecutar_compra
-from .selectors import get_all_ordenes, get_ordenes_por_evento, get_ordenes_por_usuario
+from .selectors import (
+    get_all_ordenes,
+    get_dashboard_ventas_por_organizador,
+    get_ordenes_por_evento,
+    get_ordenes_por_usuario,
+)
 from .serializers import (
     OrdenesCreateSerializer,
     OrdenesDetailSerializer,
@@ -68,9 +73,27 @@ class ComprarView(APIView):
 
         id_evento = data.get("id_evento")
         ids_grid_cell = data.get("ids_grid_cell")
+        asientos_layout = data.get("asientos_layout")
         metodo_pago = data.get("metodo_pago", "mock")
         token = data.get("token", None)
         operation_id = data.get("operation_id", None)
+
+        if (not ids_grid_cell) and asientos_layout:
+            try:
+                ids_grid_cell = resolve_layout_seat_refs_to_grid_cells(
+                    id_evento,
+                    asientos_layout,
+                )
+            except SeatUnavailableError as exc:
+                return Response(
+                    {"error": str(exc), "codigo": "SEAT_UNAVAILABLE"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            except Exception:
+                return Response(
+                    {"error": "No se pudieron resolver los asientos del layout."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if operation_id is not None:
             if not isinstance(operation_id, str) or len(operation_id) > 64:
@@ -81,7 +104,7 @@ class ComprarView(APIView):
 
         if not id_evento or not ids_grid_cell:
             return Response(
-                {"error": "Se requieren 'id_evento' e 'ids_grid_cell'."},
+                {"error": "Se requieren 'id_evento' y una lista de asientos."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if not isinstance(ids_grid_cell, list) or len(ids_grid_cell) == 0:
@@ -364,34 +387,30 @@ class OrdenesViewSet(viewsets.ModelViewSet):
         )
 
     def _construir_eventos_payload(self, eventos_qs, ordenes_pagadas):
-        from django.db.models import Sum
-        from apps.tickets.models import Tickets
         from apps.grid_cells.models import GridCells
 
         eventos_payload = []
         for ev in eventos_qs:
-            ev_ordenes_pagadas = ordenes_pagadas.filter(id_evento=ev)
-            ev_revenue = float(
-                ev_ordenes_pagadas.aggregate(total=Sum('total'))['total'] or 0
-            )
-            ev_tickets = Tickets.objects.filter(
-                id_orden__in=ev_ordenes_pagadas
-            ).count()
+            # Usar campos precalculados por evento MySQL que se actualiza diariamente
+            # Fallback a cálculos manuales si los campos no están disponibles
+            boletos_vendidos = getattr(ev, 'boletos_vendidos', 0) or 0
+            ingresos_totales = float(getattr(ev, 'ingresos_totales', 0) or 0)
+            ocupacion_pct = float(getattr(ev, 'ocupacion_pct', 0) or 0)
 
+            # Capacidad total de asientos (no cambia, pero útil para contexto)
             capacidad = GridCells.objects.filter(
                 id_layout=ev.id_version_id, tipo='ZONA DE ASIENTOS'
             ).count()
-            ocupacion = round((ev_tickets / capacidad) * 100, 1) if capacidad else 0.0
 
             eventos_payload.append({
                 "id_evento": ev.pk,
                 "nombre": ev.nombre,
                 "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
                 "estatus": ev.estatus,
-                "boletos_vendidos": ev_tickets,
+                "boletos_vendidos": boletos_vendidos,
                 "asientos_totales": capacidad,
-                "ocupacion_pct": ocupacion,
-                "revenue": ev_revenue,
+                "ocupacion_pct": ocupacion_pct,
+                "revenue": ingresos_totales,
             })
 
         return eventos_payload
@@ -517,37 +536,9 @@ class OrdenesViewSet(viewsets.ModelViewSet):
           ]
         }
         """
-        (
-            eventos_qs,
-            ordenes_pagadas,
-            total_vendido,
-            ordenes_pagadas_count,
-            ordenes_pendientes_count,
-            boletos_vendidos,
-        ) = self._obtener_contexto_ventas(request.user)
+        payload = get_dashboard_ventas_por_organizador(request.user.pk)
 
-        eventos_payload = self._construir_eventos_payload(eventos_qs, ordenes_pagadas)
-
-        eventos_con_ventas = sum(1 for e in eventos_payload if e["boletos_vendidos"] > 0)
-        ordenes_recientes_payload = self._construir_ordenes_recientes_payload(
-            eventos_qs, ordenes_pagadas
-        )
-
-        return Response(
-            {
-                "resumen": {
-                    "total_vendido": total_vendido,
-                    "boletos_vendidos": boletos_vendidos,
-                    "ordenes_pagadas": ordenes_pagadas_count,
-                    "ordenes_pendientes": ordenes_pendientes_count,
-                    "eventos_totales": len(eventos_payload),
-                    "eventos_con_ventas": eventos_con_ventas,
-                },
-                "eventos": eventos_payload,
-                "ordenes_recientes": ordenes_recientes_payload,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response(payload, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"], url_path="detalle")
     def detalle(self, request, pk=None):
