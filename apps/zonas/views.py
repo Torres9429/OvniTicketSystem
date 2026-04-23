@@ -1,6 +1,6 @@
 import logging
 from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from apps.common.permissions import IsOrganizador
 from .models import Zonas
@@ -14,7 +14,7 @@ class ZonasViewSet(viewsets.ViewSet):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated()]
+            return [AllowAny()]
         return [IsOrganizador()]
     def get_serializer_class(self):
         if self.action == "list":

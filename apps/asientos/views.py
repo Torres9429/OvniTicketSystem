@@ -14,6 +14,9 @@ from .services import (
     obtener_disponibilidad_evento, inicializar_estado_asientos,
     retener_asientos, confirmar_compra, liberar_asientos_usuario,
     SeatUnavailableError, _liberar_expirados,
+    resolve_layout_seat_refs_to_grid_cells,
+    build_layout_seat_key,
+    obtener_recomendacion_asientos,
 )
 from .serializers import (
     AsientosListSerializer,
@@ -91,7 +94,22 @@ class DisponibilidadAsientosView(APIView):
 
         inicializar_estado_asientos(id_evento, evento.id_version_id)
 
-        disponibilidad = list(obtener_disponibilidad_evento(id_evento))
+        disponibilidad_raw = list(obtener_disponibilidad_evento(id_evento))
+        disponibilidad = [
+            {
+                'id_grid_cell': item['id_grid_cell'],
+                'estado': item['estado'],
+                'row': item['id_grid_cell__row'],
+                'col': item['id_grid_cell__col'],
+                'zone_id': item['id_grid_cell__id_zona_id'],
+                'seat_key': build_layout_seat_key(
+                    item['id_grid_cell__row'],
+                    item['id_grid_cell__col'],
+                    item['id_grid_cell__id_zona_id'],
+                ),
+            }
+            for item in disponibilidad_raw
+        ]
         return Response(disponibilidad, status=status.HTTP_200_OK)
 
 
@@ -101,12 +119,35 @@ class RetenerAsientosView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        from apps.eventos.models import Eventos
+
         id_evento = request.data.get('id_evento')
         ids_grid_cell = request.data.get('ids_grid_cell', [])
+        asientos_layout = request.data.get('asientos_layout', [])
+
+        try:
+            evento = Eventos.objects.get(pk=id_evento)
+            inicializar_estado_asientos(id_evento, evento.id_version_id)
+        except Eventos.DoesNotExist:
+            return Response({'error': 'Evento no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not ids_grid_cell and asientos_layout:
+            try:
+                ids_grid_cell = resolve_layout_seat_refs_to_grid_cells(
+                    id_evento,
+                    asientos_layout,
+                )
+            except SeatUnavailableError as e:
+                return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
+            except Exception:
+                return Response(
+                    {'error': 'No se pudieron resolver los asientos del layout.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if not id_evento or not ids_grid_cell:
             return Response(
-                {'error': 'id_evento e ids_grid_cell son requeridos.'},
+                {'error': 'id_evento y una lista de asientos son requeridos.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -142,12 +183,35 @@ class ConfirmarCompraView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        from apps.eventos.models import Eventos
+
         id_evento = request.data.get('id_evento')
         ids_grid_cell = request.data.get('ids_grid_cell', [])
+        asientos_layout = request.data.get('asientos_layout', [])
+
+        try:
+            evento = Eventos.objects.get(pk=id_evento)
+            inicializar_estado_asientos(id_evento, evento.id_version_id)
+        except Eventos.DoesNotExist:
+            return Response({'error': 'Evento no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not ids_grid_cell and asientos_layout:
+            try:
+                ids_grid_cell = resolve_layout_seat_refs_to_grid_cells(
+                    id_evento,
+                    asientos_layout,
+                )
+            except SeatUnavailableError as e:
+                return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
+            except Exception:
+                return Response(
+                    {'error': 'No se pudieron resolver los asientos del layout.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if not id_evento or not ids_grid_cell:
             return Response(
-                {'error': 'id_evento e ids_grid_cell son requeridos.'},
+                {'error': 'id_evento y una lista de asientos son requeridos.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -184,12 +248,60 @@ class HoldStatusView(APIView):
 
         max_expiry = max(h.retenido_hasta for h in holds)
         ids_grid_cell = [h.id_grid_cell_id for h in holds]
+        asientos_layout = [
+            {
+                'row': h.id_grid_cell.row,
+                'col': h.id_grid_cell.col,
+                'zone_id': h.id_grid_cell.id_zona_id,
+                'seat_key': build_layout_seat_key(
+                    h.id_grid_cell.row,
+                    h.id_grid_cell.col,
+                    h.id_grid_cell.id_zona_id,
+                ),
+            }
+            for h in holds
+        ]
 
         return Response(
             {
                 'tiene_retencion': True,
                 'retenido_hasta': max_expiry.isoformat(),
                 'ids_grid_cell': ids_grid_cell,
+                'asientos_layout': asientos_layout,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class RecomendacionAsientosView(APIView):
+    """GET /api/asientos/recomendacion/
+    Returns recommended seat IDs (2-3 continuous seats close to stage).
+    Query params: id_evento, id_layout
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        id_evento = request.query_params.get('id_evento')
+        id_layout = request.query_params.get('id_layout')
+
+        if not id_evento or not id_layout:
+            return Response(
+                {'error': 'id_evento y id_layout son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            id_evento = int(id_evento)
+            id_layout = int(id_layout)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'id_evento e id_layout deben ser números.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        recommended_ids = obtener_recomendacion_asientos(id_evento, id_layout)
+
+        return Response(
+            {'asientos': recommended_ids},
+            status=status.HTTP_200_OK
         )

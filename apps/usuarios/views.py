@@ -91,7 +91,7 @@ class RegistroOrganizadorView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
-            rol = Roles.objects.get(nombre='organizador')
+            rol = Roles.objects.get(nombre='cliente')
             crear_usuario(
                 **serializer.validated_data,
                 id_rol=rol,

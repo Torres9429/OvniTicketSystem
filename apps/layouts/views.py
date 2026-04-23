@@ -19,7 +19,7 @@ class LayoutsViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated()]
+            return [AllowAny()]
         return [IsOrganizador()]
 
     def get_queryset(self):

@@ -39,9 +39,10 @@ INSTALLED_APPS = [
     'apps.tickets',
     'apps.precio_zona_evento',
     'apps.auditoria_logs',
+    'apps.payments',
     'rest_framework',
     'corsheaders',
-    
+
 ]
 
 MIDDLEWARE = [
@@ -294,6 +295,12 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
+
+# Stripe
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
+STRIPE_PUBLIC_KEY = config('STRIPE_PUBLIC_KEY', default='')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
 AES_SECRET_KEY = config(
     'AES_SECRET_KEY',
