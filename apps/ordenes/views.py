@@ -387,34 +387,30 @@ class OrdenesViewSet(viewsets.ModelViewSet):
         )
 
     def _construir_eventos_payload(self, eventos_qs, ordenes_pagadas):
-        from django.db.models import Sum
-        from apps.tickets.models import Tickets
         from apps.grid_cells.models import GridCells
 
         eventos_payload = []
         for ev in eventos_qs:
-            ev_ordenes_pagadas = ordenes_pagadas.filter(id_evento=ev)
-            ev_revenue = float(
-                ev_ordenes_pagadas.aggregate(total=Sum('total'))['total'] or 0
-            )
-            ev_tickets = Tickets.objects.filter(
-                id_orden__in=ev_ordenes_pagadas
-            ).count()
+            # Usar campos precalculados por evento MySQL que se actualiza diariamente
+            # Fallback a cálculos manuales si los campos no están disponibles
+            boletos_vendidos = getattr(ev, 'boletos_vendidos', 0) or 0
+            ingresos_totales = float(getattr(ev, 'ingresos_totales', 0) or 0)
+            ocupacion_pct = float(getattr(ev, 'ocupacion_pct', 0) or 0)
 
+            # Capacidad total de asientos (no cambia, pero útil para contexto)
             capacidad = GridCells.objects.filter(
                 id_layout=ev.id_version_id, tipo='ZONA DE ASIENTOS'
             ).count()
-            ocupacion = round((ev_tickets / capacidad) * 100, 1) if capacidad else 0.0
 
             eventos_payload.append({
                 "id_evento": ev.pk,
                 "nombre": ev.nombre,
                 "fecha_inicio": ev.fecha_inicio.isoformat() if ev.fecha_inicio else None,
                 "estatus": ev.estatus,
-                "boletos_vendidos": ev_tickets,
+                "boletos_vendidos": boletos_vendidos,
                 "asientos_totales": capacidad,
-                "ocupacion_pct": ocupacion,
-                "revenue": ev_revenue,
+                "ocupacion_pct": ocupacion_pct,
+                "revenue": ingresos_totales,
             })
 
         return eventos_payload

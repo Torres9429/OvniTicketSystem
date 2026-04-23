@@ -78,6 +78,7 @@ def get_dashboard_ventas_por_organizador(id_usuario: int):
                 revenue
             FROM v_dashboard_ventas_evento
             WHERE id_dueno = %s
+              AND estatus IN ('PUBLICADO', 'FINALIZADO')
             ORDER BY fecha_inicio DESC, id_evento DESC
             """,
             (id_usuario,),
@@ -96,6 +97,7 @@ def get_dashboard_ventas_por_organizador(id_usuario: int):
                 SUM(CASE WHEN boletos_vendidos > 0 THEN 1 ELSE 0 END) AS eventos_con_ventas
             FROM v_dashboard_ventas_evento
             WHERE id_dueno = %s
+              AND estatus IN ('PUBLICADO', 'FINALIZADO')
             """,
             (id_usuario,),
         )

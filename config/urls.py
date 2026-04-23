@@ -15,4 +15,5 @@ urlpatterns = [
     path('api/', include('apps.zonas.urls')),
     path('api/', include('apps.precio_zona_evento.urls')),
     path('api/', include('apps.auditoria_logs.urls')),
+    path('api/', include('apps.payments.urls')),
 ]

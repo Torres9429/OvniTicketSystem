@@ -16,6 +16,7 @@ from .services import (
     SeatUnavailableError, _liberar_expirados,
     resolve_layout_seat_refs_to_grid_cells,
     build_layout_seat_key,
+    obtener_recomendacion_asientos,
 )
 from .serializers import (
     AsientosListSerializer,
@@ -269,4 +270,38 @@ class HoldStatusView(APIView):
                 'asientos_layout': asientos_layout,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class RecomendacionAsientosView(APIView):
+    """GET /api/asientos/recomendacion/
+    Returns recommended seat IDs (2-3 continuous seats close to stage).
+    Query params: id_evento, id_layout
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        id_evento = request.query_params.get('id_evento')
+        id_layout = request.query_params.get('id_layout')
+
+        if not id_evento or not id_layout:
+            return Response(
+                {'error': 'id_evento y id_layout son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            id_evento = int(id_evento)
+            id_layout = int(id_layout)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'id_evento e id_layout deben ser números.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        recommended_ids = obtener_recomendacion_asientos(id_evento, id_layout)
+
+        return Response(
+            {'asientos': recommended_ids},
+            status=status.HTTP_200_OK
         )

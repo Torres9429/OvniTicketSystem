@@ -506,3 +506,104 @@ def liberar_asientos_usuario(id_evento, usuario):
         retenido_por=None,
         retenido_hasta=None,
     )
+
+
+def obtener_recomendacion_asientos(id_evento, id_layout, cantidad=3):
+    """
+    Recomienda 2-3 asientos continuos más cercanos al escenario.
+    Excluye asientos vendidos o retenidos.
+
+    Returns: list of grid_cell ids
+    """
+    from apps.grid_cells.models import GridCells
+    from apps.eventos.models import Eventos
+    from apps.layouts.models import Layouts
+    from django.db.models import Q, Prefetch
+
+    try:
+        evento = Eventos.objects.get(pk=id_evento)
+        layout = Layouts.objects.get(pk=id_layout)
+    except (Eventos.DoesNotExist, Layouts.DoesNotExist):
+        return []
+
+    # Inicializar estado de asientos si es necesario
+    inicializar_estado_asientos(id_evento, id_layout)
+
+    # Encontrar el escenario (elemento tipo 'ESCENARIO')
+    stage_cells = list(GridCells.objects.filter(
+        id_layout=id_layout,
+        tipo='ESCENARIO'
+    ).values_list('row', 'col'))
+
+    if not stage_cells:
+        # Si no hay escenario, retornar asientos cercanos al inicio
+        stage_cells = [(0, 0)]
+
+    # Calcular distancia mínima desde el escenario
+    def distance_to_stage(row, col):
+        return min(
+            abs(row - sr) + abs(col - sc)
+            for sr, sc in stage_cells
+        )
+
+    # Obtener IDs de asientos NO disponibles (vendidos o retenidos)
+    unavailable_ids = set(
+        EstadoAsientoEvento.objects.filter(
+            id_evento=id_evento,
+            estado__in=[EstadoAsientoEvento.VENDIDO, EstadoAsientoEvento.RETENIDO]
+        ).values_list('id_grid_cell_id', flat=True)
+    )
+
+    # Obtener asientos de tipo 'ZONA DE ASIENTOS' que NO están en unavailable
+    available_seats = list(
+        GridCells.objects.filter(
+            id_layout=id_layout,
+            tipo='ZONA DE ASIENTOS'
+        ).exclude(
+            id_grid_cells__in=unavailable_ids
+        ).values(
+            'id_grid_cells', 'row', 'col'
+        ).order_by('row', 'col')
+    )
+
+    if not available_seats:
+        return []
+
+    # Agrupar asientos por fila
+    seats_by_row = {}
+    for seat in available_seats:
+        row = seat['row']
+        if row not in seats_by_row:
+            seats_by_row[row] = []
+        seats_by_row[row].append(seat)
+
+    # Buscar bloques continuos de 2-3 asientos
+    best_block = None
+    best_distance = float('inf')
+
+    for row, row_seats in seats_by_row.items():
+        row_seats = sorted(row_seats, key=lambda s: s['col'])
+
+        # Buscar bloques de cantidad (3) y cantidad-1 (2) asientos
+        for block_size in [cantidad, cantidad - 1]:
+            for i in range(len(row_seats) - block_size + 1):
+                # Verificar si los asientos son continuos
+                block = row_seats[i:i + block_size]
+                cols = [s['col'] for s in block]
+
+                is_continuous = all(
+                    cols[j] == cols[0] + j for j in range(len(cols))
+                )
+
+                if is_continuous:
+                    # Calcular distancia desde el escenario al primer asiento del bloque
+                    dist = distance_to_stage(row, block[0]['col'])
+
+                    if dist < best_distance:
+                        best_distance = dist
+                        best_block = block
+
+    if best_block:
+        return [seat['id_grid_cells'] for seat in best_block]
+
+    return []
